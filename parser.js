@@ -11,7 +11,6 @@ if (typeof uneval === 'undefined') {
     };
 }
 
-
 LogLevel = {
     ALL: 100,
     DEBUG: 30,
@@ -43,6 +42,21 @@ function Scanner(pattern) {
             if (howMany === undefined)
                 howMany = 1;
             return pattern[index + howMany];
+        },
+        /**
+         * Look ahead for all the character arguments -- on match, pop them.
+         * Return whether popping occurred.
+         */
+        popLookAhead: function() {
+            for (var i = 0; i < arguments.length; ++i) {
+                var targetChar = arguments[i];
+                if (targetChar.length !== 1)
+                    throw new Error("Bad target character value: " + targetChar);
+                if (targetChar !== pattern[index + i])
+                    return false;
+            }
+            index += arguments.length;
+            return true;
         },
         popLeft: function() {
             if (index === pattern.length)
@@ -159,30 +173,32 @@ function parseQuantifier(scanner) {
     return result;
 }
 
-function Atom(child) {
-    if (!Atom.KINDS.has(child.nodeType))
-        throw new Error("Invalid Atom kind: " + child.nodeType + " in child " + child);
+function Atom(kind, value) {
+    if (!Atom.KINDS.has(kind))
+        throw new Error("Invalid Atom kind: " + kind + "; value: " + value);
     return {
         nodeType: 'Atom',
-        child: child,
+        kind: kind,
+        value: value,
         toString: function() {
-            return this.nodeType + "(child=" + this.child + ")";
+            return this.nodeType + "(kind=" + uneval(this.kind)
+                   + ", value=" + this.value + ")";
         }
     };
 }
 
 Atom.KINDS = Set('PatternCharacter', 'Dot', 'AtomEscape', 'CharacterClass',
                  'CapturingGroup', 'NonCapturingGroup');
-Atom.DOT = Atom({
-    nodeType: 'Dot',
-    toString: function() {
-        return this.nodeType + "()";
-    },
-});
+
+Atom.DOT = Atom('Dot', null);
 
 Atom.PatternCharacter = function() {
-    return Atom(PatternCharacter.apply(null, arguments));
-}
+    return Atom('PatternCharacter', PatternCharacter.apply(null, arguments));
+};
+
+Atom.CapturingGroup = function(dis) {
+    return Atom('CapturingGroup', dis);
+};
 
 function parseAtom(scanner) {
     if (!(scanner instanceof Object))
@@ -194,7 +210,7 @@ function parseAtom(scanner) {
         return parseAtomEscape(scanner);
       case '(':
         scanner.popLeft();
-        if (scanner.matchlookAhead('?:'))
+        if (scanner.popLookAhead('?', ':'))
             return Atom.NonCapturingGroup(parseDisjunction(scanner));
         return Atom.CapturingGroup(parseDisjunction(scanner));
       default:
@@ -249,7 +265,7 @@ function Alternative(term, alternative) {
     return {
         nodeType: "Alternative",
         term: term,
-        alternative: alternative,
+        alternative: alternative || Alternative.EMPTY,
         empty: !term && !alternative,
         toString: function() {
             if (this.empty)
@@ -328,6 +344,17 @@ function makeTestCases() {
     var Dis = Disjunction;
     var Alt = Alternative;
     var PatDis = function() { return Pattern(Disjunction.apply(null, arguments)); };
+
+    /**
+     * Create a capturing group alternative that wraps |dis|.
+     */
+    var CGAlt = function(dis) {
+        return Alternative(Term.wrapAtom(Atom.CapturingGroup(dis)));
+    }
+
+    /**
+     * Create an alternative tree from a bunch of pattern characters in |str|.
+     */
     var PCAlt = function(str) {
         var TAPC = function(c) { return Term.wrapAtom(Atom.PatternCharacter(c)); }
         var result = null;
@@ -339,12 +366,14 @@ function makeTestCases() {
         }
         return result;
     };
+
     return {
         'ab': PatDis(PCAlt('ab')),
         'a|b': PatDis(
             PCAlt('a'),
             Dis(PCAlt('b'))
         ),
+        '(a)': PatDis(CGAlt(Dis(PCAlt('a')))),
     };
 }
 
