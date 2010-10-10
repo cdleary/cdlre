@@ -2,6 +2,15 @@
  * Parses regular expression patterns to ASTs.
  */
 
+if (typeof uneval === 'undefined') {
+    uneval = function(obj) {
+        if (typeof obj === 'string') {
+            return '"' + obj + '"'; // HACK;
+        }
+        throw new Error("NYI");
+    };
+}
+
 
 LogLevel = {
     ALL: 100,
@@ -45,6 +54,9 @@ function Scanner(pattern) {
             if (howMany === undefined)
                 howMany = 1;
             index += 1 + howMany;
+        },
+        toString: function() {
+            return 'Scanner(pattern=' + uneval(pattern) + ', index=' + index + ')';
         },
     };
     Object.defineProperty(self, 'next', {
@@ -122,12 +134,13 @@ function PatternCharacter(sourceCharacter) {
         nodeType: "PatternCharacter",
         sourceCharacter: sourceCharacter,
         toString: function() {
-            return this.nodeType + "(sourceCharacter=" + this.sourceCharacter + ")";
+            return this.nodeType + "(sourceCharacter=" + uneval(this.sourceCharacter) + ")";
         },
     };
 }
 
-PatternCharacter.BAD = Set('^$.*+?()[]{}|'.split().concat([BACKSLASH]));
+PatternCharacter.BAD = Set('^', '$', '.', '*', '+', '?', '(', ')', '[', ']', '{', '}',
+                           '|', BACKSLASH);
 
 function parseQuantifier(scanner) {
     var result;
@@ -166,11 +179,14 @@ Atom.DOT = Atom({
         return this.nodeType + "()";
     },
 });
+
 Atom.PatternCharacter = function() {
     return Atom(PatternCharacter.apply(null, arguments));
 }
 
 function parseAtom(scanner) {
+    if (!(scanner instanceof Object))
+        throw new Error('Bad scanner value: ' + scanner);
     switch (scanner.next) {
       case '.': return Atom.DOT;
       case BACKSLASH:
@@ -182,6 +198,8 @@ function parseAtom(scanner) {
             return Atom.NonCapturingGroup(parseDisjunction(scanner));
         return Atom.CapturingGroup(parseDisjunction(scanner));
       default:
+        if (PatternCharacter.BAD.has(scanner.next))
+            return;
         return Atom.PatternCharacter(scanner.popLeft());
     };
 }
@@ -210,12 +228,14 @@ Term.wrapAtom = function(atom, quantifier) { return Term(null, atom, quantifier)
 Term.wrapAssertion = function(assertion) { return Term(assertion, null, null); }
 
 function parseTerm(scanner) {
+    if (!(scanner instanceof Object))
+        throw new Error('Bad scanner value: ' + scanner);
     var assertion = parseAssertion(scanner);
     if (assertion)
         return Term.wrapAssertion(assertion);
     var atom = parseAtom(scanner);
     if (!atom)
-        return null;
+        return;
     var quantifier = parseQuantifier(scanner);
     return Term.wrapAtom(atom, quantifier);
 }
@@ -247,12 +267,15 @@ Alternative.EMPTY = Alternative();
  *               | ε
  */
 function parseAlternative(scanner) {
+    if (!(scanner instanceof Object))
+        throw new Error('Bad scanner value: ' + scanner);
     if (scanner.length === 0)
         return Alternative.EMPTY;
     var term = parseTerm(scanner);
     if (!term)
-        return null;
-    return Alternative(term, parseAlternative(scanner));
+        return;
+    var alternative = parseAlternative(scanner) || Alternative.EMPTY;
+    return Alternative(term, alternative);
 }
 
 /**
@@ -276,8 +299,10 @@ function Disjunction(alternative, disjunction) {
  */
 function parseDisjunction(scanner) {
     var lhs = parseAlternative(scanner);
-    if (scanner.next === '|')
-        return Disjunction(lhs, parseDisjunction(scanner.popLeft()));
+    if (scanner.next === '|') {
+        scanner.popLeft();
+        return Disjunction(lhs, parseDisjunction(scanner));
+    }
     return Disjunction(lhs);
 }
 
@@ -292,6 +317,8 @@ function Pattern(disjunction) {
 }
 
 function parse(scanner) {
+    if (!(scanner instanceof Object))
+        throw new Error('Bad scanner value: ' + scanner);
     return Pattern(parseDisjunction(scanner));
 }
 
@@ -314,10 +341,10 @@ function makeTestCases() {
     };
     return {
         'ab': PatDis(PCAlt('ab')),
-        /*'a|b': PatDis(
+        'a|b': PatDis(
             PCAlt('a'),
             Dis(PCAlt('b'))
-        ),*/
+        ),
     };
 }
 
@@ -365,6 +392,7 @@ function test() {
         var actual = parse(Scanner(pattern));
         try {
             checkParseEquality(expected, actual);
+            print("PASSED: " + uneval(pattern));
         } catch (e) {
             print("... pattern: " + uneval(pattern));
         }
