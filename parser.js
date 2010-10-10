@@ -2,6 +2,16 @@
  * Parses regular expression patterns to ASTs.
  */
 
+
+LogLevel = {
+    ALL: 100,
+    DEBUG: 30,
+    INFO: 20,
+    WARN: 10,
+    NONE: 0,
+};
+
+var LOG_LEVEL = LogLevel.NONE;
 var BACKSLASH = '\\';
 
 /* Set(a, b, c, ...) makes a set keyed on |toString| values. */
@@ -28,6 +38,7 @@ function Scanner(pattern) {
         popLeft: function() {
             if (index === pattern.length)
                 throw new Error("Popping past end of input");
+            Scanner.log.debug("popLeft: " + pattern[index]);
             return pattern[index++];
         },
         popLeftAndLookAhead: function(howMany) {
@@ -44,6 +55,13 @@ function Scanner(pattern) {
     });
     return self;
 }
+
+Scanner.log = {
+    debug: function(msg) {
+        if (LOG_LEVEL >= LogLevel.DEBUG)
+            print("Scanner: DEBUG: " + msg);
+    },
+};
 
 /**
  * Try a bunch of productions with the scanner and return the first successful
@@ -118,6 +136,7 @@ function parseQuantifier(scanner) {
       case '+': result = Quantifier.Plus(); break;
       case '?': result = Quantifier.Question(); break;
       case '{': throw new Error("Handle bounded quantifiers");
+      default: return;
     }
     scanner.popLeft();
     if (scanner.next === '?') {
@@ -127,23 +146,28 @@ function parseQuantifier(scanner) {
     return result;
 }
 
-function Atom(kind) {
-    if (!Atom.KINDS.has(kind))
-        throw new Error("Invalid Atom kind: " + kind);
+function Atom(child) {
+    if (!Atom.KINDS.has(child.nodeType))
+        throw new Error("Invalid Atom kind: " + child.nodeType + " in child " + child);
     return {
         nodeType: 'Atom',
-        kind: kind,
+        child: child,
         toString: function() {
-            return this.nodeType + "(kind=" + this.kind + ")";
+            return this.nodeType + "(child=" + this.child + ")";
         }
     };
 }
 
 Atom.KINDS = Set('PatternCharacter', 'Dot', 'AtomEscape', 'CharacterClass',
                  'CapturingGroup', 'NonCapturingGroup');
-Atom.DOT = Atom('Dot');
+Atom.DOT = Atom({
+    nodeType: 'Dot',
+    toString: function() {
+        return this.nodeType + "()";
+    },
+});
 Atom.PatternCharacter = function() {
-    return Atom('PatternCharacter', PatternCharacter.apply(null, arguments));
+    return Atom(PatternCharacter.apply(null, arguments));
 }
 
 function parseAtom(scanner) {
@@ -225,7 +249,10 @@ Alternative.EMPTY = Alternative();
 function parseAlternative(scanner) {
     if (scanner.length === 0)
         return Alternative.EMPTY;
-    return Alternative(parseTerm(scanner), parseAlternative(scanner));
+    var term = parseTerm(scanner);
+    if (!term)
+        return null;
+    return Alternative(term, parseAlternative(scanner));
 }
 
 /**
@@ -277,11 +304,11 @@ function makeTestCases() {
     var PCAlt = function(str) {
         var TAPC = function(c) { return Term.wrapAtom(Atom.PatternCharacter(c)); }
         var result = null;
-        for (var i = 0; i < str.length; ++i) {
+        for (var i = str.length - 1; i >=0; --i) {
             if (result)
                 result = Alternative(TAPC(str[i]), result);
             else
-                result = Alternative(TAPC(str[i]), Alternative.Empty);
+                result = Alternative(TAPC(str[i]), Alternative.EMPTY);
         }
         return result;
     };
@@ -321,9 +348,9 @@ function checkParseEquality(expected, actual) {
         try {
             checkParseEquality(eVal, aVal);
         } catch (e) {
-            print("... key   " + key);
-            print("Expected: " + expected);
-            print("Actual:   " + actual);
+            print("... key:      " + key);
+            print("    expected: " + expected);
+            print("    actual:   " + actual);
             throw e;
         }
     }
@@ -342,4 +369,5 @@ function test() {
             print("... pattern: " + uneval(pattern));
         }
     }
+    print('Finished tests.');
 }
