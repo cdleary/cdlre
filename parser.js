@@ -156,6 +156,41 @@ function PatternCharacter(sourceCharacter) {
 PatternCharacter.BAD = Set('^', '$', '.', '*', '+', '?', '(', ')', '[', ']', '{', '}',
                            '|', BACKSLASH);
 
+function QuantifierPrefix(kind, value) {
+    if (!QuantifierPrefix.KINDS.has(kind))
+        throw new Error("Invalid quantifier prefix kind: " + kind + "; value: " + value);
+
+    return {
+        nodeType: 'QuantifierPrefix',
+        kind: kind,
+        value: value,
+        toString: function() {
+            var result = this.nodeType + "(kind=" + uneval(this.kind);
+            if (this.value)
+                result += ", value=" + this.value
+            result += ")";
+            return result;
+        }
+    };
+}
+
+QuantifierPrefix.KINDS = Set('Star', 'Plus', 'Question', 'Fixed', 'LowerBound', 'Range');
+QuantifierPrefix.STAR = QuantifierPrefix('Star');
+
+
+function Quantifier(prefix, lazy) {
+    return {
+        nodeType: 'Quantifier',
+        prefix: prefix,
+        lazy: !!lazy,
+        toString: function() {
+            return this.nodeType + "(prefix=" + this.prefix + ", lazy=" + this.lazy + ")";
+        }
+    };
+}
+
+Quantifier.Star = function(lazy) { return Quantifier(QuantifierPrefix.STAR, lazy); };
+
 function parseQuantifier(scanner) {
     var result;
     switch (scanner.next) {
@@ -374,6 +409,7 @@ function makeTestCases() {
             Dis(PCAlt('b'))
         ),
         '(a)': PatDis(CGAlt(Dis(PCAlt('a')))),
+        'a*': PatDis(Alt(Term.wrapAtom(Atom.PatternCharacter('a'), Quantifier.Star()))),
     };
 }
 
