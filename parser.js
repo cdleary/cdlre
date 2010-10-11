@@ -37,6 +37,15 @@ Set.prototype.has = function(item) { return item in this._map; };
 
 function Scanner(pattern) {
     var index = 0;
+    var cc0 = '0'.charCodeAt(0);
+    var cc9 = '9'.charCodeAt(0);
+    var toDigit = function(c) {
+        var ccc = c.charCodeAt(0);
+        // TODO: test corner case with leading zeros.
+        if (cc0 <= ccc && ccc <= cc9)
+            return ccc - cc0;
+        throw new Error("Non-digit character: " + c);
+    };
     var self = {
         lookAhead: function(howMany) {
             if (howMany === undefined)
@@ -58,6 +67,20 @@ function Scanner(pattern) {
             index += arguments.length;
             return true;
         },
+        tryPop: function(c) {
+            if (pattern[index] === c) {
+                index += 1;
+                return true;
+            }
+            return false;
+        },
+        popOrSyntaxError: function(c, msg) {
+            if (pattern[index] === c) {
+                index += 1;
+                return;
+            }
+            throw new SyntaxError(msg);
+        },
         popLeft: function() {
             if (index === pattern.length)
                 throw new Error("Popping past end of input");
@@ -68,6 +91,36 @@ function Scanner(pattern) {
             if (howMany === undefined)
                 howMany = 1;
             index += 1 + howMany;
+        },
+        /** Throw a SyntaxError when non-optional and a decimal digit is not found. */
+        popDecimalDigit: function(optional) {
+            try {
+                var accum = toDigit(this.next);
+            } catch (e) {
+                if (e.toString().indexOf('Non-digit') !== -1) {
+                    if (optional)
+                        throw e;
+                    throw new SyntaxError('Invalid decimal digit: ' + this.next);
+                }
+                throw e; // Unknown!
+            }
+            this.popLeft();
+            return accum;
+        },
+        popDecimalDigits: function() {
+            var accum = this.popDecimalDigit();
+            while (true) {
+                try {
+                    var digit = this.popDecimalDigit(true);
+                } catch (e) {
+                    if (e.toString().indexOf('Non-digit') !== -1)
+                        return accum;
+                    throw e;
+                }
+                accum *= 10;
+                accum += digit;
+            }
+            return accum;
         },
         toString: function() {
             return 'Scanner(pattern=' + uneval(pattern) + ', index=' + index + ')';
@@ -176,7 +229,8 @@ function QuantifierPrefix(kind, value) {
 
 QuantifierPrefix.KINDS = Set('Star', 'Plus', 'Question', 'Fixed', 'LowerBound', 'Range');
 QuantifierPrefix.STAR = QuantifierPrefix('Star');
-
+QuantifierPrefix.QUESTION = QuantifierPrefix('Question');
+QuantifierPrefix.PLUS = QuantifierPrefix('Plus');
 
 function Quantifier(prefix, lazy) {
     return {
@@ -191,6 +245,25 @@ function Quantifier(prefix, lazy) {
 
 Quantifier.Star = function(lazy) { return Quantifier(QuantifierPrefix.STAR, lazy); };
 Quantifier.Plus = function(lazy) { return Quantifier(QuantifierPrefix.PLUS, lazy); };
+Quantifier.Question = function(lazy) { return Quantifier(QuantifierPrefix.QUESTION, lazy); };
+
+Quantifier.Fixed = function(lazy, value) {
+    if (typeof value !== 'number')
+        throw new Error("Bad fixed value: " + value);
+    return Quantifier(QuantifierPrefix('Fixed', value), lazy);
+};
+
+Quantifier.Range = function(lazy, value) {
+    if (value.length !== 2)
+        throw new Error("Bad range value: " + value);
+    return Quantifier(QuantifierPrefix('Range', value), lazy);
+};
+
+Quantifier.LowerBound = function(lazy, value) {
+    if (typeof value !== 'number')
+        throw new Error("Bad lower bound value: " + value);
+    return Quantifier(QuantifierPrefix('Range', value), lazy);
+};
 
 function parseQuantifier(scanner) {
     var result;
@@ -198,8 +271,23 @@ function parseQuantifier(scanner) {
       case '*': result = Quantifier.Star(); break;
       case '+': result = Quantifier.Plus(); break;
       case '?': result = Quantifier.Question(); break;
-      case '{': throw new Error("Handle bounded quantifiers");
-      default: return;
+      case '{':
+        scanner.popLeft();
+        var firstDigits = scanner.popDecimalDigits();
+        if (!firstDigits)
+            return;
+        if (!scanner.tryPop(',')) {
+            scanner.popOrSyntaxError('}', 'Expected closing brace on quantifier prefix');
+            return Quantifier.Fixed(scanner.tryPop('?'), firstDigits);
+        }
+
+        if (scanner.tryPop('}'))
+            return Quantifier.LowerBound(scanner.tryPop('?'), firstDigits);
+
+        throw new Error("Quantifier prefix range");
+
+      default:
+        return;
     }
     scanner.popLeft();
     if (scanner.next === '?') {
@@ -405,6 +493,19 @@ function makeTestCases() {
         return result;
     };
 
+    /** Quantifier pattern character alternative. */
+    var QPCAlt = function(c, kind, lazy, quantVal, nextAlt) {
+        if (nextAlt && nextAlt.nodeType !== 'Alternative')
+            throw new Error("Bad next alternative: " + nextAlt);
+        var QK = Quantifier[kind];
+        if (!QK)
+            throw new Error("Invalid quantifier kind: " + uneval(kind));
+        return Alt(Term.wrapAtom(
+            Atom.PatternCharacter(c),
+            QK(!!lazy, quantVal)),
+        nextAlt);
+    };
+
     return {
         'ab': PatDis(PCAlt('ab')),
         'a|b': PatDis(
@@ -412,8 +513,13 @@ function makeTestCases() {
             Dis(PCAlt('b'))
         ),
         '(a)': PatDis(CGAlt(Dis(PCAlt('a')))),
-        'a*': PatDis(Alt(Term.wrapAtom(Atom.PatternCharacter('a'), Quantifier.Star()))),
-        'a+?': PatDis(Alt(Term.wrapAtom(Atom.PatternCharacter('a'), Quantifier.Plus(true)))),
+        'a*': PatDis(QPCAlt('a', 'Star')),
+        'a+?': PatDis(QPCAlt('a', 'Plus', true)),
+        'a??': PatDis(QPCAlt('a', 'Question', true)),
+        'a+b': PatDis(QPCAlt('a', 'Plus', false, undefined, PCAlt('b'))),
+        '(a*|b)': PatDis(CGAlt(Dis(QPCAlt('a', 'Star'), Dis(PCAlt('b'))))),
+        'a{3}': PatDis(QPCAlt('a', 'Fixed', false, 3)),
+        'a{1,}': PatDis(QPCAlt('a', 'LowerBound', false, 1)),
     };
 }
 
