@@ -190,6 +190,7 @@ function Quantifier(prefix, lazy) {
 }
 
 Quantifier.Star = function(lazy) { return Quantifier(QuantifierPrefix.STAR, lazy); };
+Quantifier.Plus = function(lazy) { return Quantifier(QuantifierPrefix.PLUS, lazy); };
 
 function parseQuantifier(scanner) {
     var result;
@@ -412,6 +413,7 @@ function makeTestCases() {
         ),
         '(a)': PatDis(CGAlt(Dis(PCAlt('a')))),
         'a*': PatDis(Alt(Term.wrapAtom(Atom.PatternCharacter('a'), Quantifier.Star()))),
+        'a+?': PatDis(Alt(Term.wrapAtom(Atom.PatternCharacter('a'), Quantifier.Plus(true)))),
     };
 }
 
