@@ -208,7 +208,7 @@ function parseQuantifier(scanner) {
     return result;
 }
 
-function Atom(kind, value) {
+function _Atom(kind, value) {
     if (!Atom.KINDS.has(kind))
         throw new Error("Invalid Atom kind: " + kind + "; value: " + value);
     return {
@@ -222,17 +222,19 @@ function Atom(kind, value) {
     };
 }
 
+var Atom = {}; // Put a bag over the weird constructor's head.
+
 Atom.KINDS = Set('PatternCharacter', 'Dot', 'AtomEscape', 'CharacterClass',
                  'CapturingGroup', 'NonCapturingGroup');
 
-Atom.DOT = Atom('Dot', null);
+Atom.DOT = _Atom('Dot', null);
 
 Atom.PatternCharacter = function() {
-    return Atom('PatternCharacter', PatternCharacter.apply(null, arguments));
+    return _Atom('PatternCharacter', PatternCharacter.apply(null, arguments));
 };
 
 Atom.CapturingGroup = function(dis) {
-    return Atom('CapturingGroup', dis);
+    return _Atom('CapturingGroup', dis);
 };
 
 function parseAtom(scanner) {
