@@ -25,11 +25,12 @@ function ProcedureBuilder(ast, multiline, ignoreCase, input, index) {
     this.inputLength = input.length;
     this.index = index;
     this.nCapturingParens = ast.nCapturingParens;
-    this.log = new Logger('ProcedureBuilder');
+    this.clog = new Logger('ProcedureBuilder@CompileTime');
+    this.rlog = new Logger('ProcedureBuilder@RunTime');
 }
 
 ProcedureBuilder.prototype.evalPattern = function() {
-    this.log.debug("evaluating pattern");
+    this.clog.debug("evaluating pattern");
     var m = this.evalDisjunction(this.ast.disjunction);
     var c = IdentityContinuation;
     var cap = new Array(this.nCapturingParens);
@@ -38,7 +39,7 @@ ProcedureBuilder.prototype.evalPattern = function() {
 };
 
 ProcedureBuilder.prototype.evalDisjunction = function(dis) {
-    this.log.debug("evaluating disjunction");
+    this.clog.debug("evaluating disjunction");
     if (!dis.disjunction)
         return this.evalAlternative(dis.alternative);
     var m1 = this.evalAlternative(dis.alternative);
@@ -52,7 +53,7 @@ ProcedureBuilder.prototype.evalDisjunction = function(dis) {
 };
 
 ProcedureBuilder.prototype.evalAlternative = function(alt) {
-    this.log.debug("evaluating alternative");
+    this.clog.debug("evaluating alternative");
     if (alt.empty)
         return function matcher(x, c) { return c(x); };
     /*
@@ -81,8 +82,16 @@ ProcedureBuilder.prototype.evalQuantifier = function(quant) {
     if (!tupFun)
         throw new Error("Bad value for quant prefix kind: " + prefix.kind);
     var tup = tupFun();
-    tup.push(quant.lazy);
-    return tup;
+    var result = {
+        min: tup[0],
+        max: tup[1],
+        greedy: !quant.lazy,
+        toString: function() {
+            return "{min: " + this.min + ", max: " + this.max + ", greedy: " + this.greedy + "}";
+        }
+    };
+    this.clog.debug("Quantifier " + uneval(prefix.kind) + "; result: " + result);
+    return result;
 };
 
 ProcedureBuilder.prototype.repeatMatcher = function(m, min, max, greedy, x, c,
@@ -118,7 +127,7 @@ ProcedureBuilder.prototype.repeatMatcher = function(m, min, max, greedy, x, c,
 
 ProcedureBuilder.prototype.evalTerm = function(term) {
     var self = this;
-    self.log.debug("evaluating term");
+    self.clog.debug("evaluating term");
     if (term.atom && !term.quantifier && !term.assertion)
         return self.evalAtom(term.atom);
     if (term.atom && term.quantifier) {
@@ -135,7 +144,7 @@ ProcedureBuilder.prototype.evalTerm = function(term) {
 
 ProcedureBuilder.prototype.evalAtom = function(atom) {
     var self = this;
-    self.log.debug("evaluating atom");
+    self.clog.debug("evaluating atom");
     if (atom.kind === 'PatternCharacter') {
         var ch = atom.value.sourceCharacter;
         return self.CharacterSetMatcher(Set(ch), false);
@@ -150,16 +159,16 @@ ProcedureBuilder.prototype.evalAtom = function(atom) {
         var parenIndex = 1; // FIXME: just wrong.
         return function matcher(x, c) {
             var d = function(y) {
-                self.log.info('executing capture group continuation');
+                self.rlog.info('executing capture group continuation');
                 var cap = y.captures.map(identity);
                 var xe = x.endIndex;
                 var ye = y.endIndex;
-                self.log.debug('start state endIndex: ' + xe);
-                self.log.debug('end state endIndex:   ' + ye);
+                self.rlog.debug('start state endIndex: ' + xe);
+                self.rlog.debug('end state endIndex:   ' + ye);
                 var s = self.input.substr(xe, ye - xe);
                 cap[parenIndex] = s;
                 var z = State(ye, cap);
-                self.log.info("executing capture group's subsequent continuation: " + c);
+                self.rlog.info("executing capture group's subsequent continuation: " + c);
                 return c(z);
             };
             return m(x, d);
@@ -170,10 +179,11 @@ ProcedureBuilder.prototype.evalAtom = function(atom) {
 
 ProcedureBuilder.prototype.CharacterSetMatcher = function(charSet, invert) {
     var self = this;
-    self.log.debug("creating char set matcher");
+    self.clog.debug("creating char set matcher");
     return function matcher(x, c) {
         var e = x.endIndex;
-        self.log.debug("char matcher at end index: " + e);
+        // Note: clog because char set matchers are all executed at compile time.
+        self.clog.debug("char matcher at end index: " + e);
         if (e === self.inputLength)
             return MatchResult.FAILURE;
         /* 
@@ -182,8 +192,8 @@ ProcedureBuilder.prototype.CharacterSetMatcher = function(charSet, invert) {
          */
         var ch = self.input[e];
         var chc = self.canonicalize(ch);
-        self.log.debug("canonicalized input char: " + uneval(chc));
-        self.log.debug("char set: " + charSet);
+        self.clog.debug("canonicalized input char: " + uneval(chc));
+        self.clog.debug("char set: " + charSet);
         if (charSet.has(chc) === invert)
             return MatchResult.FAILURE;
         var cap = x.captures;

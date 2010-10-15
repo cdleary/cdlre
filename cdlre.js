@@ -128,12 +128,14 @@ function testCDLRE() {
         if (!checkMatchResults(hostResult, guestResult))
             fail();
     }
+    var disabledTests = [
+    ];
     var tests = [
+        [/..h/, 'blah'],
+        [/foo(.)baz/, 'foozbaz'],
         [/a/, 'blah'],
         [/la/, 'blah'],
         [/a*h/, 'blah'],
-        [/..h/, 'blah'],
-        [/foo(.)baz/, 'foozbaz'],
     ];
     for (var i = 0; i < tests.length; ++i) {
         var test = tests[i];
