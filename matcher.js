@@ -8,6 +8,7 @@
 var MatchResult = {FAILURE: "failure"};
 
 function IdentityContinuation(state) { return state; }
+function identity(x) { return x; }
 
 function State(endIndex, captures) {
     return {
@@ -66,11 +67,70 @@ ProcedureBuilder.prototype.evalAlternative = function(alt) {
     };
 };
 
+ProcedureBuilder.prototype.evalQuantifier = function(quant) {
+    /* Now I see why JS needs a lambda syntax... */
+    var prefix = quant.prefix;
+    var tupFun = {
+        Star: function() { return [0, Infinity]; },
+        Plus: function() { return [1, Infinity]; },
+        Question: function() { return [0, 1]; },
+        Fixed: function() { return [prefix.value, prefix.value]; },
+        LowerBound: function() { return [prefix.value, Infinity]; },
+        Range: function() { return prefix.value.map(identity); },
+    }[prefix.kind];
+    if (!tupFun)
+        throw new Error("Bad value for quant prefix kind: " + prefix.kind);
+    var tup = tupFun();
+    tup.push(quant.lazy);
+    return tup;
+};
+
+ProcedureBuilder.prototype.repeatMatcher = function(m, min, max, greedy, x, c,
+                                                    parenIndex, parenCount) {
+    var self = this;
+    if (max === 0)
+        return c(x);
+    var d = function(y) {
+        if (min === 0 && y.endIndex === x.endIndex)
+            return MatchResult.FAILURE;
+        var min2 = min === 0 ? 0 : min - 1;
+        var max2 = max === Infinity ? Infinity : max - 1;
+        return self.repeatMatcher(m, min2, max2, greedy, y, c, parenIndex, parenCount);
+    };
+    var cap = x.captures.map(identity);
+    for (var k = parenIndex; parenIndex <= parenIndex + parenCount; ++k)
+        cap[k] = undefined;
+    var e = x.endIndex;
+    var xr = State(e, cap);
+    if (min !== 0)
+        return m(xr, d);
+    if (!greedy) {
+        var z = c(x);
+        if (z !== MatchResult.FAILURE)
+            return z;
+        return m(xr, d);
+    }
+    var z = m(xr, d);
+    if (z !== MatchResult.FAILURE)
+        return z;
+    return c(x);
+}
+
 ProcedureBuilder.prototype.evalTerm = function(term) {
-    this.log.debug("evaluating term");
+    var self = this;
+    self.log.debug("evaluating term");
     if (term.atom && !term.quantifier && !term.assertion)
-        return this.evalAtom(term.atom);
-    throw new Error("NYI: " + term);
+        return self.evalAtom(term.atom);
+    if (term.atom && term.quantifier) {
+        var m = self.evalAtom(term.atom);
+        var bounds = self.evalQuantifier(term.quantifier);
+        var min = bounds.min, max = bounds.max, greedy = bounds.greedy;
+        var parenIndex = term.parenIndex;
+        var parenCount = term.atom.parenCount;
+        return function matcher(x, c) {
+            return self.repeatMatcher(m, min, max, greedy, x, c, parenIndex, parenCount);
+        };
+    }
 };
 
 ProcedureBuilder.prototype.evalAtom = function(atom) {
@@ -91,7 +151,7 @@ ProcedureBuilder.prototype.evalAtom = function(atom) {
         return function matcher(x, c) {
             var d = function(y) {
                 self.log.info('executing capture group continuation');
-                var cap = y.captures.map(function(x) { return x; });
+                var cap = y.captures.map(identity);
                 var xe = x.endIndex;
                 var ye = y.endIndex;
                 self.log.debug('start state endIndex: ' + xe);

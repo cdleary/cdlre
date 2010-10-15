@@ -86,6 +86,10 @@ function GuestBuiltins() {
 }
 
 function checkMatchResults(expected, actual) {
+    if ((expected === null) !== (actual === null)) {
+        print("MISMATCH: expected: " + uneval(expected) + "; actual: " + uneval(actual));
+        return false;
+    }
     var ok = true;
     var check = function(attr) {
         var expectedValue = expected[attr];
@@ -115,6 +119,7 @@ function testCDLRE() {
             var guestResult = guestRE.exec(input);
         } catch (e) {
             print("CAUGHT: " + e);
+            print("STACK:  " + e.stack);
             fail();
             return;
         }
