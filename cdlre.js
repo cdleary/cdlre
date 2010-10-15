@@ -136,6 +136,7 @@ function testCDLRE() {
         [/a/, 'blah'],
         [/la/, 'blah'],
         [/a*h/, 'blah'],
+        [/m(o{2,})cow/, 'mooooocow'],
     ];
     for (var i = 0; i < tests.length; ++i) {
         var test = tests[i];

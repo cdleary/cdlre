@@ -71,25 +71,33 @@ ProcedureBuilder.prototype.evalAlternative = function(alt) {
 ProcedureBuilder.prototype.evalQuantifier = function(quant) {
     /* Now I see why JS needs a lambda syntax... */
     var prefix = quant.prefix;
-    var tupFun = {
-        Star: function() { return [0, Infinity]; },
-        Plus: function() { return [1, Infinity]; },
-        Question: function() { return [0, 1]; },
-        Fixed: function() { return [prefix.value, prefix.value]; },
-        LowerBound: function() { return [prefix.value, Infinity]; },
-        Range: function() { return prefix.value.map(identity); },
+    var quantFun = {
+        Star: function() { return {min: 0, max: Infinity}; },
+        Plus: function() { return {min: 1, max: Infinity}; },
+        Question: function() { return {min: 0, max: 1}; },
+        Fixed: function() { return {min: prefix.value, max: prefix.value}; },
+        LowerBound: function() { return {min: prefix.value, max: Infinity}; },
+        Range: function() {
+            if (prefix.value.length !== 2)
+                throw new Error("Bad range prefix value: " + prefix.value);
+            return {min: prefix.value[0], max: prefix.value[1]};
+        },
     }[prefix.kind];
-    if (!tupFun)
+    if (!quantFun)
         throw new Error("Bad value for quant prefix kind: " + prefix.kind);
-    var tup = tupFun();
-    var result = {
-        min: tup[0],
-        max: tup[1],
-        greedy: !quant.lazy,
-        toString: function() {
-            return "{min: " + this.min + ", max: " + this.max + ", greedy: " + this.greedy + "}";
+    var result = quantFun();
+    result.greedy = !quant.lazy;
+    result.toString = function() {
+        var accum = ['{'];
+        for (var key in result) {
+            if (!result.hasOwnProperty(key) || key === 'toString')
+                continue;
+            accum.push(key, ': ', uneval(result[key]), ', ');
         }
-    };
+        accum.pop();
+        accum.push('}');
+        return accum.join('');
+    }
     this.clog.debug("Quantifier " + uneval(prefix.kind) + "; result: " + result);
     return result;
 };

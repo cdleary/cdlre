@@ -253,7 +253,7 @@ Quantifier.Range = function(lazy, value) {
 Quantifier.LowerBound = function(lazy, value) {
     if (typeof value !== 'number')
         throw new Error("Bad lower bound value: " + value);
-    return Quantifier(QuantifierPrefix('Range', value), lazy);
+    return Quantifier(QuantifierPrefix('LowerBound', value), lazy);
 };
 
 function parseQuantifier(scanner) {
