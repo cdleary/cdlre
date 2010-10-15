@@ -85,23 +85,23 @@ function GuestBuiltins() {
     };
 }
 
-function checkMatchResults(expected, actual) {
-    if ((expected === null) !== (actual === null)) {
-        print("MISMATCH: expected: " + uneval(expected) + "; actual: " + uneval(actual));
+function checkMatchResults(host, guest) {
+    if ((host === null) !== (guest === null)) {
+        print("MISMATCH: host: " + uneval(host) + "; guest: " + uneval(guest));
         return false;
     }
     var ok = true;
     var check = function(attr) {
-        var expectedValue = expected[attr];
-        var actualValue = actual[attr];
-        if (expectedValue !== actualValue) {
+        var hostValue = host[attr];
+        var guestValue = guest[attr];
+        if (hostValue !== guestValue) {
             ok = false;
-            print('MISMATCH: key: ' + attr + '; expected: ' + uneval(expectedValue)
-                  + '; actual: ' + uneval(actualValue));
+            print('MISMATCH: key: ' + attr + '; host: ' + uneval(hostValue)
+                  + '; guest: ' + uneval(guestValue));
         }
     };
     'index input length'.split().forEach(check);
-    for (var i = 0; i < expected.length; ++i)
+    for (var i = 0; i < host.length; ++i)
         check(i);
     return ok;
 }
@@ -111,7 +111,7 @@ function testCDLRE() {
     var failCount = 0;
     function check(pattern, input) {
         function fail() {
-            print("FAIL:   pattern: " + uneval(pattern) + "; input: " + uneval(input));
+            print("FAIL:     pattern: " + uneval(pattern) + "; input: " + uneval(input));
             failCount += 1;
         }
         try {
