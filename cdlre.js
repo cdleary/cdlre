@@ -104,17 +104,40 @@ function checkMatchResults(expected, actual) {
 
 function testCDLRE() {
     var guestBuiltins = GuestBuiltins();
+    var failCount = 0;
     function check(pattern, input) {
-        var guestRE = new guestBuiltins.RegExp(pattern);
-        var guestResult = guestRE.exec(input);
+        function fail() {
+            print("FAIL:   pattern: " + uneval(pattern) + "; input: " + uneval(input));
+            failCount += 1;
+        }
+        try {
+            var guestRE = new guestBuiltins.RegExp(pattern);
+            var guestResult = guestRE.exec(input);
+        } catch (e) {
+            print("CAUGHT: " + e);
+            fail();
+            return;
+        }
         var hostRE = new RegExp(pattern);
         var hostResult = hostRE.exec(input);
         if (!checkMatchResults(hostResult, guestResult))
-            print("FAIL: pattern: " + uneval(pattern) + "; input: " + uneval(input));
+            fail();
     }
-    //check('a', 'blah');
-    //check('la', 'blah');
-    //check('a*h', 'blah');
-    //check('..h', 'blah');
-    check('foo(.)baz', 'foozbaz');
+    var tests = [
+        [/a/, 'blah'],
+        [/la/, 'blah'],
+        [/a*h/, 'blah'],
+        [/..h/, 'blah'],
+        [/foo(.)baz/, 'foozbaz'],
+    ];
+    for (var i = 0; i < tests.length; ++i) {
+        var test = tests[i];
+        var pattern = test[0].source;
+        var input = test[1];
+        check(pattern, input);
+    }
+    if (failCount)
+        print("FAILED " + failCount + "/" + tests.length);
+    else
+        print("PASSED " + tests.length + "/" + tests.length);
 }

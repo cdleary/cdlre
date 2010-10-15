@@ -430,7 +430,7 @@ function Term(assertion, atom, quantifier) {
         atom: atom,
         quantifier: quantifier,
         toString: function() {
-            if (this.atom)
+            if (this.atom && !this.quantifier)
                 return "Term.wrapAtom(" + this.atom + ")";
             return (this.nodeType + "(assertion=" + this.assertion + ", atom=" +
                     this.atom + ", quantifier=" + this.quantifier + ")");
@@ -601,6 +601,8 @@ var TestConstructors = {
 function makeTestCases() {
     with (TestConstructors) {
         var disabled = {
+        };
+        return {
             /* Flat pattern. */
             'ab': PatDis(PCAlt('ab')),
             /* Alternation */
@@ -629,8 +631,6 @@ function makeTestCases() {
             //'ca(?!t)\\w': PatDis(PCAlt
 
             '(a*|b)': PatDis(CGAlt(Dis(QPCAlt('a', 'Star'), Dis(PCAlt('b'))))),
-        };
-        return {
             'f(.)z': PatDis(PCAlt('f', CGAlt(Dis(DOT_ALT), PCAlt('z')))),
         };
     }
