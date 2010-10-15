@@ -11,29 +11,7 @@ if (typeof uneval === 'undefined') {
     };
 }
 
-LogLevel = {
-    ALL: 100,
-    DEBUG: 30,
-    INFO: 20,
-    WARN: 10,
-    NONE: 0,
-};
-
-var LOG_LEVEL = LogLevel.NONE;
 var BACKSLASH = '\\';
-
-/* Set(a, b, c, ...) makes a set keyed on |toString| values. */
-function Set() {
-    if (!(this instanceof Set))
-        return new Set(arguments);
-    var items = arguments[0];
-    this._map = {};
-    for (var i = 0; i < items.length; ++i)
-        this._map[items[i]] = null;
-}
-
-Set.prototype.has = function(item) { return item in this._map; };
-
 
 function Scanner(pattern) {
     var index = 0;
@@ -46,6 +24,7 @@ function Scanner(pattern) {
             return ccc - cc0;
         throw new Error("Non-digit character: " + c);
     };
+    var log = new Logger("Scanner");
     var self = {
         lookAhead: function(howMany) {
             if (howMany === undefined)
@@ -67,12 +46,20 @@ function Scanner(pattern) {
             index += arguments.length;
             return true;
         },
-        tryPop: function(c) {
-            if (pattern[index] === c) {
-                index += 1;
-                return true;
+        tryPop: function() {
+            var indexBefore = index;
+            for (var i = 0; i < arguments.length; ++i) {
+                var targetChar = arguments[i];
+                if (targetChar.length !== 1)
+                    throw new Error('Bad target character value: ' + targetChar);
+                var c = pattern[index + i];
+                if (c !== targetChar) {
+                    index = indexBefore;
+                    return false;
+                }
             }
-            return false;
+            index += arguments.length;
+            return true;
         },
         popOrSyntaxError: function(c, msg) {
             if (pattern[index] === c) {
@@ -84,7 +71,7 @@ function Scanner(pattern) {
         popLeft: function() {
             if (index === pattern.length)
                 throw new Error("Popping past end of input");
-            Scanner.log.debug("popLeft: " + pattern[index]);
+            log.debug("popLeft: " + pattern[index]);
             return pattern[index++];
         },
         popLeftAndLookAhead: function(howMany) {
@@ -132,62 +119,66 @@ function Scanner(pattern) {
     Object.defineProperty(self, 'length', {
         get: function() { return pattern.length - index; }
     });
+    Object.defineProperty(self, 'rest', {
+        get: function() { return pattern.substr(index); }
+    });
     return self;
 }
 
-Scanner.log = {
-    debug: function(msg) {
-        if (LOG_LEVEL >= LogLevel.DEBUG)
-            print("Scanner: DEBUG: " + msg);
-    },
+var Assertion = {
+    KINDS: Set('BeginningOfLine', 'EndOfLine', 'WordBoundary', 'NotWordBoundary',
+               'ZeroWidthPositive', 'ZeroWidthNegative'),
 };
 
-/**
- * Try a bunch of productions with the scanner and return the first successful
- * result in a wrapper.
- */
-function tryProductions(scanner, makeWrapper) {
-    return function() {
-        for (var i = 0; i < arguments.length; ++i) {
-            var production = arguments[i];
-            var result = production(scanner);
-            if (result !== null)
-                return makeWrapper(result);
-        }
-        return null;
-    }
+function _Assertion(kind, disjunction) {
+    if (!Assertion.KINDS.has(kind))
+        throw new Error("Bad assertion kind: " + uneval(kind));
+
+    return {
+        nodeType: 'Assertion',
+        kind: kind,
+        disjunction: disjunction,
+        toString: function() {
+            return this.nodeType + '(kind=' + uneval(this.kind)
+                    + ', disjunction=' + this.disjunction + ')';
+        },
+    };
 }
+
+Assertion.BOL = _Assertion('BeginningOfLine');
+Assertion.EOL = _Assertion('EndOfLine');
+Assertion.WB = _Assertion('WordBoundary');
+Assertion.NWB = _Assertion('NotWordBoundary');
+Assertion.ZeroWidthPositive = _Assertion.bind('ZeroWidthPositive');
+Assertion.ZeroWidthNegative = _Assertion.bind('ZeroWidthNegative');
 
 /**
  * @return  An assertion on success, null on failure.
  * @post    The scanner will be advanced iff the parse is successful.
  */
 function parseAssertion(scanner) {
-    switch (scanner.next) {
-      case '^': return Assertion.BEGINNING_OF_LINE;
-      case '$': return Assertion.END_OF_LINE;
-      case BACKSLASH:
-        switch (scanner.lookAhead()) {
-          case 'b':
-            scanner.popLeftAndLookAhead();
-            return Assertion.WORD_BOUNDARY;
-          case 'B':
-            scanner.popLeftAndLookAhead();
-            return Assertion.NOT_WORD_BOUNDARY;
-        }
-        return null;
-      case '(':
-        if (scanner.lookAhead() !== '?')
-            return null;
-        switch (scanner.lookAhead(2)) {
-        case '=':
-            scanner.popLeftAndLookAhead(2);
-            return PositiveAssertion(parseDisjunction(scanner));
-        case '!':
-            scanner.popLeftAndLookAhead(2);
-            return NegativeAssertion(parseDisjunction(scanner));
-        }
+    if (scanner.tryPop('^'))
+        return Assertion.BOL;
+    if (scanner.tryPop('$'))
+        return Assertion.EOL;
+
+    if (scanner.next === BACKSLASH) {
+        if (scanner.tryPop(BACKSLASH, 'b'))
+            return Assertion.WB;
+        if (scanner.tryPop(BACKSLASH, 'B'))
+            return Assertion.NWB;
+        return; /* Character class or escaped source character. */
     }
+
+    /* Assertion groups. */
+    if (!scanner.tryPop('(', '?'))
+        return;
+
+    if (scanner.tryPop('='))
+        return Assertion.ZeroWidthPositive(parseDisjunction(scanner));
+    if (scanner.tryPop('!'))
+        return Assertion.ZerWidthNegative(parseDisjunction(scanner));
+    throw new SyntaxError('Invalid assertion start: ' + scanner.next);
 }
 
 function PatternCharacter(sourceCharacter) {
@@ -290,11 +281,76 @@ function parseQuantifier(scanner) {
         return;
     }
     scanner.popLeft();
-    if (scanner.next === '?') {
-        scanner.popLeft();
+    if (scanner.tryPop('?'))
         result.lazy = true;
-    }
     return result;
+}
+
+function CharacterClassEscape(kind) {
+    if (!CharacterClassEscape.KINDS.has(kind))
+        throw new Error("Bad character class escape kind: " + kind);
+
+    return {
+        nodeType: 'CharacterClassEscape',
+        kind: kind,
+        toString: function() {
+            return this.nodeType + '(kind=' + uneval(this.kind) + ')';
+        },
+    };
+}
+
+CharacterClassEscape.KINDS = Set('Word', 'NotWord', 'Digit', 'NotDigit',
+                                 'Space', 'NotSpace');
+CharacterClassEscape.WORD = CharacterClassEscape('Word');
+
+function _AtomEscape(decimalEscape, characterEscape, characterClassEscape) {
+    return {
+        nodeType: "AtomEscape",
+        decimalEscape: decimalEscape,
+        characterEscape: characterEscape,
+        characterClassEscape: characterClassEscape,
+        toString: function() {
+            return this.nodeType + "(decimalEscape=" + this.decimalEscape
+                    + ", characterEscape=" + this.characterEscape
+                    + ", characterClassEscape=" + this.characterClassEscape
+                    + ")";
+        },
+    };
+}
+
+var AtomEscape = {
+    CharacterClassEscape: {
+        DIGIT: _AtomEscape(undefined, undefined, CharacterClassEscape('Digit')),
+        NOT_DIGIT: _AtomEscape(undefined, undefined, CharacterClassEscape('NotDigit')),
+        SPACE: _AtomEscape(undefined, undefined, CharacterClassEscape('Space')),
+        NOT_SPACE: _AtomEscape(undefined, undefined, CharacterClassEscape('NotSpace')),
+        WORD: _AtomEscape(undefined, undefined, CharacterClassEscape('Word')),
+        NOT_WORD: _AtomEscape(undefined, undefined, CharacterClassEscape('NotWord')),
+    },
+};
+
+/**
+ * AtomEscape ::= DecimalEscape
+ *              | CharacterEscape
+ *              | CharacterClassEscape
+ *
+ * @note Backslash character has already been popped of the scanner.
+ */
+function parseAtomEscape(scanner) {
+    if (scanner.tryPop('d'))
+        return AtomEscape.CharacterClassEscape.DIGIT;
+    if (scanner.tryPop('D'))
+        return AtomEscape.CharacterClassEscape.NOT_DIGIT;
+    if (scanner.tryPop('s'))
+        return AtomEscape.CharacterClassEscape.SPACE;
+    if (scanner.tryPop('S'))
+        return AtomEscape.CharacterClassEscape.NOT_SPACE;
+    if (scanner.tryPop('w'))
+        return AtomEscape.CharacterClassEscape.WORD;
+    if (scanner.tryPop('W'))
+        return AtomEscape.CharacterClassEscape.NOT_WORD;
+
+    throw new Error("NYI: other kinds of escapes");
 }
 
 function _Atom(kind, value) {
@@ -305,6 +361,10 @@ function _Atom(kind, value) {
         kind: kind,
         value: value,
         toString: function() {
+            if (Set('CapturingGroup', 'PatternCharacter').has(this.kind))
+                return this.nodeType + '.' + this.kind + '(' + this.value + ')';
+            if (this.kind === 'Dot')
+                return this.nodeType + '.DOT';
             return this.nodeType + "(kind=" + uneval(this.kind)
                    + ", value=" + this.value + ")";
         }
@@ -326,24 +386,32 @@ Atom.CapturingGroup = function(dis) {
     return _Atom('CapturingGroup', dis);
 };
 
+Atom.CharacterClassEscape = {
+    WORD: _Atom('AtomEscape', AtomEscape.CharacterClassEscape.WORD),
+};
+
 function parseAtom(scanner) {
-    if (!(scanner instanceof Object))
-        throw new Error('Bad scanner value: ' + scanner);
-    switch (scanner.next) {
-      case '.': return Atom.DOT;
-      case BACKSLASH:
-        scanner.popLeft();
-        return parseAtomEscape(scanner);
-      case '(':
-        scanner.popLeft();
-        if (scanner.popLookAhead('?', ':'))
-            return Atom.NonCapturingGroup(parseDisjunction(scanner));
-        return Atom.CapturingGroup(parseDisjunction(scanner));
-      default:
-        if (PatternCharacter.BAD.has(scanner.next))
-            return;
-        return Atom.PatternCharacter(scanner.popLeft());
-    };
+    if (scanner.tryPop('.'))
+        return Atom.DOT;
+
+    if (scanner.tryPop(BACKSLASH))
+        return _Atom('AtomEscape', parseAtomEscape(scanner));
+
+    if (scanner.tryPop('(')) {
+        var result;
+        if (scanner.tryPop('?', ':'))
+            result = Atom.NonCapturingGroup(parseDisjunction(scanner));
+        else
+            result = Atom.CapturingGroup(parseDisjunction(scanner));
+        if (!result)
+            throw new SyntaxError("Capturing group required");
+        scanner.popOrSyntaxError(')', 'Missing closing parenthesis on group');
+        return result;
+    }
+
+    if (PatternCharacter.BAD.has(scanner.next))
+        return;
+    return Atom.PatternCharacter(scanner.popLeft());
 }
 
 function Term(assertion, atom, quantifier) {
@@ -353,6 +421,8 @@ function Term(assertion, atom, quantifier) {
         throw new Error('Bad atom value: ' + atom);
     if (quantifier && quantifier.nodeType !== 'Quantifier')
         throw new Error('Bad quantifier value: ' + quantifier);
+    if (!assertion && !atom && !quantifier)
+        throw new Error("Bad empty term");
 
     return {
         nodeType: "Term",
@@ -360,6 +430,8 @@ function Term(assertion, atom, quantifier) {
         atom: atom,
         quantifier: quantifier,
         toString: function() {
+            if (this.atom)
+                return "Term.wrapAtom(" + this.atom + ")";
             return (this.nodeType + "(assertion=" + this.assertion + ", atom=" +
                     this.atom + ", quantifier=" + this.quantifier + ")");
         },
@@ -424,9 +496,14 @@ function parseAlternative(scanner) {
  * @param disjunction   Optional.
  */
 function Disjunction(alternative, disjunction) {
+    if (alternative && alternative.nodeType !== 'Alternative')
+        throw new Error('Bad alternative value: ' + alternative);
+    if (disjunction && disjunction.nodeType !== 'Disjunction')
+        throw new Error('Bad disjunction value: ' + disjunction);
+
     return {
         nodeType: "Disjunction",
-        alternative: alternative,
+        alternative: alternative || Alternative.EMPTY,
         disjunction: disjunction,
         toString: function() {
             return (this.nodeType + "(alternative=" + this.alternative +
@@ -464,63 +541,99 @@ function parse(scanner) {
     return Pattern(parseDisjunction(scanner));
 }
 
+function makeAST(pattern) { return parse(Scanner(pattern)); }
+
 /* Tests */
 
-function makeTestCases() {
-    var Dis = Disjunction;
-    var Alt = Alternative;
-    var PatDis = function() { return Pattern(Disjunction.apply(null, arguments)); };
-
+var TestConstructors = {
+    Dis: Disjunction,
+    Alt: Alternative,
+    PatDis: function() {
+        return Pattern(Disjunction.apply(null, arguments));
+    },
     /**
      * Create a capturing group alternative that wraps |dis|.
      */
-    var CGAlt = function(dis) {
-        return Alternative(Term.wrapAtom(Atom.CapturingGroup(dis)));
-    }
-
+    CGAlt: function(dis, nextAlt) {
+        return Alternative(Term.wrapAtom(Atom.CapturingGroup(dis)), nextAlt);
+    },
     /**
      * Create an alternative tree from a bunch of pattern characters in |str|.
      */
-    var PCAlt = function(str) {
+    PCAlt: function(str, nextAlt) {
         var TAPC = function(c) { return Term.wrapAtom(Atom.PatternCharacter(c)); }
         var result = null;
         for (var i = str.length - 1; i >=0; --i) {
             if (result)
                 result = Alternative(TAPC(str[i]), result);
             else
-                result = Alternative(TAPC(str[i]), Alternative.EMPTY);
+                result = Alternative(TAPC(str[i]), nextAlt || Alternative.EMPTY);
         }
         return result;
-    };
-
+    },
     /** Quantifier pattern character alternative. */
-    var QPCAlt = function(c, kind, lazy, quantVal, nextAlt) {
+    QPCAlt: function(c, kind, lazy, quantVal, nextAlt) {
         if (nextAlt && nextAlt.nodeType !== 'Alternative')
             throw new Error("Bad next alternative: " + nextAlt);
         var QK = Quantifier[kind];
         if (!QK)
             throw new Error("Invalid quantifier kind: " + uneval(kind));
-        return Alt(Term.wrapAtom(
-            Atom.PatternCharacter(c),
-            QK(!!lazy, quantVal)),
-        nextAlt);
-    };
+        return Alternative(
+            Term.wrapAtom(Atom.PatternCharacter(c), QK(!!lazy, quantVal)),
+            nextAlt
+        );
+    },
+    AssAlt: {
+        BOL: Alternative(Term.wrapAssertion(Assertion.BOL)),
+        BOLConcat: function(nextAlt) {
+            var result = Alternative(Term.wrapAssertion(Assertion.BOL));
+            result.alternative = nextAlt;
+            return result;
+        },
+        EOL: Alternative(Term.wrapAssertion(Assertion.EOL)),
+    },
+    CCEAlt: {
+        WORD: Alternative(Term.wrapAtom(Atom.CharacterClassEscape.WORD)),
+    },
+    DOT_ALT: Alternative(Term.wrapAtom(Atom.DOT)),
+};
 
-    return {
-        'ab': PatDis(PCAlt('ab')),
-        'a|b': PatDis(
-            PCAlt('a'),
-            Dis(PCAlt('b'))
-        ),
-        '(a)': PatDis(CGAlt(Dis(PCAlt('a')))),
-        'a*': PatDis(QPCAlt('a', 'Star')),
-        'a+?': PatDis(QPCAlt('a', 'Plus', true)),
-        'a??': PatDis(QPCAlt('a', 'Question', true)),
-        'a+b': PatDis(QPCAlt('a', 'Plus', false, undefined, PCAlt('b'))),
-        '(a*|b)': PatDis(CGAlt(Dis(QPCAlt('a', 'Star'), Dis(PCAlt('b'))))),
-        'a{3}': PatDis(QPCAlt('a', 'Fixed', false, 3)),
-        'a{1,}': PatDis(QPCAlt('a', 'LowerBound', false, 1)),
-    };
+function makeTestCases() {
+    with (TestConstructors) {
+        var disabled = {
+            /* Flat pattern. */
+            'ab': PatDis(PCAlt('ab')),
+            /* Alternation */
+            'a|b': PatDis(
+                PCAlt('a'),
+                Dis(PCAlt('b'))
+            ),
+            /* Quantifiers. */
+            'a*': PatDis(QPCAlt('a', 'Star')),
+            'a+?': PatDis(QPCAlt('a', 'Plus', true)),
+            'a??': PatDis(QPCAlt('a', 'Question', true)),
+            'a+b': PatDis(QPCAlt('a', 'Plus', false, undefined, PCAlt('b'))),
+            'a{3}': PatDis(QPCAlt('a', 'Fixed', false, 3)),
+            'a{1,}': PatDis(QPCAlt('a', 'LowerBound', false, 1)),
+            /* Capturing groups and alternation. */
+            '(a)': PatDis(CGAlt(Dis(PCAlt('a')))),
+            '((b))': PatDis(CGAlt(Dis(CGAlt(Dis(PCAlt('b')))))),
+            '(|abc)': PatDis(CGAlt(Dis(Alt.EMPTY, Dis(PCAlt('abc'))))),
+            /* Simple assertions. */
+            '^abc': PatDis(AssAlt.BOLConcat(PCAlt('abc'))),
+            'def$': PatDis(PCAlt('def', AssAlt.EOL)),
+            '^abcdef$': PatDis(AssAlt.BOLConcat(PCAlt('abcdef', AssAlt.EOL))),
+            /* Builtin character classes. */
+            '\\w': PatDis(CCEAlt.WORD),
+            /* Grouping assertions. */
+            //'ca(?!t)\\w': PatDis(PCAlt
+
+            '(a*|b)': PatDis(CGAlt(Dis(QPCAlt('a', 'Star'), Dis(PCAlt('b'))))),
+        };
+        return {
+            'f(.)z': PatDis(PCAlt('f', CGAlt(Dis(DOT_ALT), PCAlt('z')))),
+        };
+    }
 }
 
 function checkParseEquality(expected, actual) {
@@ -558,7 +671,44 @@ function checkParseEquality(expected, actual) {
     }
 }
 
-function test() {
+function pformat(v) {
+    var s = v.toString();
+    var indent = 0;
+    var s = s.replace(/(\(|\)|,\s*)/g, function(tok) {
+        tok = tok[0];
+        if (tok === '(') {
+            indent += 1;
+        }
+        if (tok === ')') {
+            indent -= 1;
+            return ')';
+        }
+        var accum = [];
+        for (var i = 0; i < indent; ++i)
+            accum.push('  ');
+        return tok + '\n' + accum.join('');
+    });
+    return s;
+}
+
+function juxtapose(block1, block2, columnWidth) {
+    var accum = [];
+    var lb1 = block1.split('\n');
+    var lb2 = block2.split('\n');
+    for (var i = 0; i < Math.max(lb1.length, lb2.length); ++i) {
+        /* Is there no fast way to pad these things? */
+        var line1 = lb1[i] || '';
+        while (line1.length < columnWidth)
+            line1 = line1 + ' ';
+        var line2 = lb2[i] || '';
+        accum.push(line1 + '    ' + line2);
+    }
+    return accum.join('\n')
+}
+
+function pprint(v) { print(pformat(v)); }
+
+function testParser() {
     print('Making test cases...');
     var cases = makeTestCases();
     print('Beginning tests...');
@@ -570,6 +720,10 @@ function test() {
             print("PASSED: " + uneval(pattern));
         } catch (e) {
             print("... pattern: " + uneval(pattern));
+            var colWidth = 50;
+            print(juxtapose('Expected', 'Actual', colWidth));
+            print(juxtapose('========', '======', colWidth));
+            print(juxtapose(pformat(expected), pformat(actual), colWidth));
         }
     }
     print('Finished tests.');
