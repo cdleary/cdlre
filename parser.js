@@ -60,10 +60,10 @@ function Scanner(pattern) {
             }
             throw new SyntaxError(msg);
         },
-        popLeft: function() {
+        pop: function() {
             if (index === pattern.length)
                 throw new Error("Popping past end of input");
-            log.debug("popLeft: " + pattern[index]);
+            log.debug("pop: " + pattern[index]);
             return pattern[index++];
         },
         /** Throw a SyntaxError when non-optional and a decimal digit is not found. */
@@ -78,7 +78,7 @@ function Scanner(pattern) {
                 }
                 throw e; // Unknown!
             }
-            this.popLeft();
+            this.pop();
             return accum;
         },
         popDecimalDigits: function() {
@@ -112,32 +112,34 @@ function Scanner(pattern) {
     return self;
 }
 
-var Assertion = {
-    KINDS: Set('BeginningOfLine', 'EndOfLine', 'WordBoundary', 'NotWordBoundary',
-               'ZeroWidthPositive', 'ZeroWidthNegative'),
-};
+var Assertion = (function() {
+    var kinds = Set('BeginningOfLine', 'EndOfLine', 'WordBoundary', 'NotWordBoundary',
+                    'ZeroWidthPositive', 'ZeroWidthNegative');
 
-function _Assertion(kind, disjunction) {
-    if (!Assertion.KINDS.has(kind))
-        throw new Error("Bad assertion kind: " + uneval(kind));
+    function Assertion(kind, disjunction) {
+        if (!kinds.has(kind))
+            throw new Error("Bad assertion kind: " + uneval(kind));
+
+        return {
+            nodeType: 'Assertion',
+            kind: kind,
+            disjunction: disjunction,
+            toString: function() {
+                return this.nodeType + '(kind=' + uneval(this.kind)
+                        + ', disjunction=' + this.disjunction + ')';
+            },
+        };
+    }
 
     return {
-        nodeType: 'Assertion',
-        kind: kind,
-        disjunction: disjunction,
-        toString: function() {
-            return this.nodeType + '(kind=' + uneval(this.kind)
-                    + ', disjunction=' + this.disjunction + ')';
-        },
+        BOL: Assertion('BeginningOfLine'),
+        EOL: Assertion('EndOfLine'),
+        WB: Assertion('WordBoundary'),
+        NWB: Assertion('NotWordBoundary'),
+        ZeroWidthPositive: Assertion.bind('ZeroWidthPositive'),
+        ZeroWidthNegative: Assertion.bind('ZeroWidthNegative'),
     };
-}
-
-Assertion.BOL = _Assertion('BeginningOfLine');
-Assertion.EOL = _Assertion('EndOfLine');
-Assertion.WB = _Assertion('WordBoundary');
-Assertion.NWB = _Assertion('NotWordBoundary');
-Assertion.ZeroWidthPositive = _Assertion.bind('ZeroWidthPositive');
-Assertion.ZeroWidthNegative = _Assertion.bind('ZeroWidthNegative');
+})();
 
 function PatternCharacter(sourceCharacter) {
     if (PatternCharacter.BAD.has(sourceCharacter) ||
@@ -380,42 +382,41 @@ function CharacterClass(ranges, inverted) {
     };
 }
 
-function _Atom(kind, value) {
-    if (!Atom.KINDS.has(kind))
-        throw new Error("Invalid Atom kind: " + kind + "; value: " + value);
+var Atom = (function() {
+    var kinds = Set('PatternCharacter', 'Dot', 'AtomEscape', 'CharacterClass',
+                    'CapturingGroup', 'NonCapturingGroup');
+
+    function Atom(kind, value) {
+        if (!kinds.has(kind))
+            throw new Error("Invalid Atom kind: " + kind + "; value: " + value);
+
+        return {
+            nodeType: 'Atom',
+            kind: kind,
+            value: value,
+            toString: function() {
+                if (Set('CapturingGroup', 'PatternCharacter').has(this.kind))
+                    return this.nodeType + '.' + this.kind + '(' + this.value + ')';
+                if (this.kind === 'Dot')
+                    return this.nodeType + '.DOT';
+                return this.nodeType + "(kind=" + uneval(this.kind)
+                       + ", value=" + this.value + ")";
+            }
+        };
+    }
 
     return {
-        nodeType: 'Atom',
-        kind: kind,
-        value: value,
-        toString: function() {
-            if (Set('CapturingGroup', 'PatternCharacter').has(this.kind))
-                return this.nodeType + '.' + this.kind + '(' + this.value + ')';
-            if (this.kind === 'Dot')
-                return this.nodeType + '.DOT';
-            return this.nodeType + "(kind=" + uneval(this.kind)
-                   + ", value=" + this.value + ")";
-        }
+        DOT: Atom('Dot', null),
+        CapturingGroup: function(dis) { return Atom('CapturingGroup', dis); },
+        CharacterClass: function(cc) { return Atom('CharacterClass', cc); },
+        PatternCharacter: function() {
+            return Atom('PatternCharacter', PatternCharacter.apply(null, arguments));
+        },
+        CharacterClassEscape: {
+            WORD: Atom('AtomEscape', AtomEscape.CharacterClassEscape.WORD),
+        },
     };
-}
-
-var Atom = { // Put a bag over the weird constructor's head.
-    // Note, can't put anything in here that calls into |_Atom|.
-    KINDS: Set('PatternCharacter', 'Dot', 'AtomEscape', 'CharacterClass',
-               'CapturingGroup', 'NonCapturingGroup'),
-};
-
-Atom.DOT = _Atom('Dot', null);
-Atom.CapturingGroup = function(dis) { return _Atom('CapturingGroup', dis); };
-Atom.CharacterClass = function(cc) { return _Atom('CharacterClass', cc); }
-
-Atom.PatternCharacter = function() {
-    return _Atom('PatternCharacter', PatternCharacter.apply(null, arguments));
-};
-
-Atom.CharacterClassEscape = {
-    WORD: _Atom('AtomEscape', AtomEscape.CharacterClassEscape.WORD),
-};
+})();
 
 function Term(assertion, atom, quantifier) {
     if (assertion && assertion.nodeType !== 'Assertion')
@@ -536,7 +537,7 @@ function parseQuantifier(scanner) {
       case '+': result = Quantifier.Plus(); break;
       case '?': result = Quantifier.Question(); break;
       case '{':
-        scanner.popLeft();
+        scanner.pop();
         var firstDigits = scanner.popDecimalDigits();
         if (!firstDigits)
             return;
@@ -553,7 +554,7 @@ function parseQuantifier(scanner) {
       default:
         return;
     }
-    scanner.popLeft();
+    scanner.pop();
     if (scanner.tryPop('?'))
         result.lazy = true;
     return result;
@@ -601,7 +602,7 @@ function parseClassAtomNoDash(scanner) {
         throw new SyntaxError('Invalid ClassAtomNoDash source character: ' + uneval(scanner.rest));
 
     parserLog.debug("Popping class-atom source-character: " + uneval(scanner.next));
-    return ClassAtomNoDash.SourceCharacter(scanner.popLeft());
+    return ClassAtomNoDash.SourceCharacter(scanner.pop());
 }
 
 /**
@@ -704,7 +705,7 @@ function parseAtom(scanner) {
 
     if (PatternCharacter.BAD.has(scanner.next))
         return;
-    return Atom.PatternCharacter(scanner.popLeft());
+    return Atom.PatternCharacter(scanner.pop());
 }
 
 function parseTerm(scanner) {
@@ -743,7 +744,7 @@ function parseAlternative(scanner) {
 function parseDisjunction(scanner) {
     var lhs = parseAlternative(scanner);
     if (scanner.next === '|') {
-        scanner.popLeft();
+        scanner.pop();
         return Disjunction(lhs, parseDisjunction(scanner));
     }
     return Disjunction(lhs);
