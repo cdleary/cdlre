@@ -139,35 +139,6 @@ Assertion.NWB = _Assertion('NotWordBoundary');
 Assertion.ZeroWidthPositive = _Assertion.bind('ZeroWidthPositive');
 Assertion.ZeroWidthNegative = _Assertion.bind('ZeroWidthNegative');
 
-/**
- * @return  An assertion on success, null on failure.
- * @post    The scanner will be advanced iff the parse is successful.
- */
-function parseAssertion(scanner) {
-    if (scanner.tryPop('^'))
-        return Assertion.BOL;
-    if (scanner.tryPop('$'))
-        return Assertion.EOL;
-
-    if (scanner.next === BACKSLASH) {
-        if (scanner.tryPop(BACKSLASH, 'b'))
-            return Assertion.WB;
-        if (scanner.tryPop(BACKSLASH, 'B'))
-            return Assertion.NWB;
-        return; /* Character class or escaped source character. */
-    }
-
-    /* Assertion groups. */
-    if (!scanner.tryPop('(', '?'))
-        return;
-
-    if (scanner.tryPop('='))
-        return Assertion.ZeroWidthPositive(parseDisjunction(scanner));
-    if (scanner.tryPop('!'))
-        return Assertion.ZerWidthNegative(parseDisjunction(scanner));
-    throw new SyntaxError('Invalid assertion start: ' + scanner.next);
-}
-
 function PatternCharacter(sourceCharacter) {
     if (PatternCharacter.BAD.has(sourceCharacter) ||
         !(typeof sourceCharacter === 'string') ||
@@ -243,36 +214,6 @@ Quantifier.LowerBound = function(lazy, value) {
     return Quantifier(QuantifierPrefix('LowerBound', value), lazy);
 };
 
-function parseQuantifier(scanner) {
-    var result;
-    switch (scanner.next) {
-      case '*': result = Quantifier.Star(); break;
-      case '+': result = Quantifier.Plus(); break;
-      case '?': result = Quantifier.Question(); break;
-      case '{':
-        scanner.popLeft();
-        var firstDigits = scanner.popDecimalDigits();
-        if (!firstDigits)
-            return;
-        if (!scanner.tryPop(',')) {
-            scanner.popOrSyntaxError('}', 'Expected closing brace on quantifier prefix');
-            return Quantifier.Fixed(scanner.tryPop('?'), firstDigits);
-        }
-
-        if (scanner.tryPop('}'))
-            return Quantifier.LowerBound(scanner.tryPop('?'), firstDigits);
-
-        throw new Error("Quantifier prefix range");
-
-      default:
-        return;
-    }
-    scanner.popLeft();
-    if (scanner.tryPop('?'))
-        result.lazy = true;
-    return result;
-}
-
 function CharacterClassEscape(kind) {
     if (!CharacterClassEscape.KINDS.has(kind))
         throw new Error("Bad character class escape kind: " + kind);
@@ -316,36 +257,6 @@ var AtomEscape = {
     },
 };
 
-/**
- * AtomEscape ::= DecimalEscape
- *              | CharacterEscape
- *              | CharacterClassEscape
- *
- * @note Backslash character has already been popped of the scanner.
- */
-function parseAtomEscape(scanner) {
-    if (scanner.tryPop('d'))
-        return AtomEscape.CharacterClassEscape.DIGIT;
-    if (scanner.tryPop('D'))
-        return AtomEscape.CharacterClassEscape.NOT_DIGIT;
-    if (scanner.tryPop('s'))
-        return AtomEscape.CharacterClassEscape.SPACE;
-    if (scanner.tryPop('S'))
-        return AtomEscape.CharacterClassEscape.NOT_SPACE;
-    if (scanner.tryPop('w'))
-        return AtomEscape.CharacterClassEscape.WORD;
-    if (scanner.tryPop('W'))
-        return AtomEscape.CharacterClassEscape.NOT_WORD;
-
-    throw new Error("NYI: other kinds of escapes");
-}
-
-function parseClassEscape(scanner) {
-    if (scanner.tryPop('b')) // Interesting: backspace character!
-        return ClassEscape.BACKSPACE;
-    throw new Error("NYI: class escapes");
-}
-
 function _ClassAtomNoDash(kind, value) {
     if (!ClassAtomNoDash.KINDS.has(kind))
         throw new Error("Bad kind for ClassAtomNoDash: " + kind);
@@ -364,20 +275,6 @@ var ClassAtomNoDash = {KINDS: Set('ClassEscape', 'SourceCharacter')};
 
 ClassAtomNoDash.ClassEscape = function(ce) { return _ClassAtomNoDash('ClassEscape', ce); };
 ClassAtomNoDash.SourceCharacter = function(c) { return _ClassAtomNoDash('SourceCharacter', c); };
-
-/**
- * ClassAtomNoDash ::= SourceCharacter but not one of \ or ] or -
- *                   | \ ClassEscape
- */
-function parseClassAtomNoDash(scanner) {
-    parserLog.info('parsing ClassAtomNoDash');
-    if (scanner.tryPop(BACKSLASH))
-        return ClassAtomNoDash.ClassEscape(parseClassEscape(scanner));
-    if (Set(BACKSLASH, ']', '-').has(scanner.next))
-        throw new SyntaxError('Invalid ClassAtomNoDash source character');
-
-    return ClassAtomNoDash.SourceCharacter(scanner.popLeft());
-}
 
 function _ClassAtom(kind, value) {
     if (!ClassAtom.KINDS.has(kind))
@@ -403,33 +300,8 @@ var ClassAtom = {KINDS: Set('Dash', 'NoDash')};
 ClassAtom.DASH = _ClassAtom('Dash');
 ClassAtom.NoDash = function(value) { return _ClassAtom('NoDash', value); }
 
-
-function parseClassAtom(scanner) {
-    if (scanner.tryPop('-'))
-        return ClassAtom.DASH;
-
-    return ClassAtom.NoDash(parseClassAtomNoDash(scanner));
-}
-
-function _NonEmptyClassRanges(kind, classAtom, value) {
-    if (!NonEmptyClassRanges.KINDS.has(kind))
-        throw new Error("Bad non-empty class ranges kind: " + kind);
-
-    return {
-        nodeType: 'NonEmptyClassRanges',
-        kind: kind,
-        classAtom: classAtom,
-        value: value,
-        toString: function() {
-            var result = this.nodeType + '.' + this.kind + '(classAtom='
-                         + this.classAtom + ", ...)";
-            return result;
-        }
-    };
-}
-
 function _NonEmptyClassRangesNoDash(kind, classAtom, value) {
-    if (!NonemptyClassRangesNoDash.has(kind))
+    if (!NonEmptyClassRangesNoDash.KINDS.has(kind))
         throw new Error("Bad NonemptyClassRangesNoDash kind: " + kind);
 
     return {
@@ -456,22 +328,21 @@ NonEmptyClassRangesNoDash.NotDashed = function(classAtom, nonEmptyClassRangesNoD
     return _NonEmptyClassRangesNoDash('NotDashed', classAtom, nonEmptyClassRangesNoDash);
 }
 
-/*
- * NonEmptyClassRangesNoDash ::= ClassAtom
- *                             | ClassAtomNoDash NonemptyClassRangesNoDash
- *                             | ClassAtomNoDash - ClassAtom ClassRanges
- */
-function parseNonEmptyClassRangesNoDash(scanner) {
-    var classAtomMaybeDash = parseClassAtom(scanner);
-    if (classAtomMaybeDash.kind === 'ClassAtom')
-        return NonEmptyClassRangesNoDash.ClassAtom(classAtomMaybeDash);
-    if (scanner.tryPop('-')) {
-        return NonEmptyClassRangesNoDash.Dashed(classAtomMaybeDash,
-                                                parseClassAtom(scanner),
-                                                parseClassRanges(scanner));
-    }
-    return NonEmptyClassRangesNoDash.NotDashed(classAtomMaybeDash,
-                                               parseNonEmptyClassRangesNoDash(scanner));
+function _NonEmptyClassRanges(kind, classAtom, value) {
+    if (!NonEmptyClassRanges.KINDS.has(kind))
+        throw new Error("Bad non-empty class ranges kind: " + kind);
+
+    return {
+        nodeType: 'NonEmptyClassRanges',
+        kind: kind,
+        classAtom: classAtom,
+        value: value,
+        toString: function() {
+            var result = this.nodeType + '.' + this.kind + '(classAtom='
+                         + this.classAtom + ", ...)";
+            return result;
+        }
+    };
 }
 
 var NonEmptyClassRanges = {
@@ -483,21 +354,6 @@ var NonEmptyClassRanges = {
         return _NonEmptyClassRanges('NoDash', classAtom, nonEmptyClassRangesNoDash);
     }
 };
-
-/*
- * NonEmptyClassRanges ::= ClassAtom
- *                       | ClassAtom NonemptyClassRangesNoDash
- *                       | ClassAtom - ClassAtom ClassRanges
- */
-function parseNonEmptyClassRanges(scanner) {
-    var classAtom = parseClassAtom(scanner);
-    if (scanner.tryPop('-')) {
-        return NonEmptyClassRanges.Dashed(classAtom,
-                                          parseClassAtom(scanner),
-                                          parseClassRanges(scanner));
-    }
-    return NonEmptyClassRanges.NotDashed(classAtom, parseNonEmptyClassRangesNoDash(scanner));
-}
 
 function ClassRanges(value) {
     return {
@@ -513,16 +369,6 @@ function ClassRanges(value) {
 
 ClassRanges.EMPTY = ClassRanges();
 
-/**
- * ClassRanges ::= [empty]
- *               | NonemptyClassRanges
- */
-function parseClassRanges(scanner) {
-    if (scanner.next === ']')
-        return ClassRanges.EMPTY;
-    return ClassRanges(parseNonEmptyClassRanges(scanner));
-}
-
 function CharacterClass(ranges, inverted) {
     return {
         nodeType: 'CharacterClass',
@@ -532,19 +378,6 @@ function CharacterClass(ranges, inverted) {
             return this.nodeType + '(ranges=' + this.ranges + ', inverted=' + this.inverted + ')';
         }
     };
-}
-
-/**
- * CharacterClass ::= [ [lookahead ∉ {^}] ClassRanges ]
- *                  | [ ^ ClassRanges ]
- */
-function parseCharacterClass(scanner) {
-    var inverted = scanner.tryPop('^');
-    // Interesting: [^] is a negation of the empty class range (grammatically permitted).
-    var classRanges = parseClassRanges(scanner);
-    var result = CharacterClass(classRanges, inverted);
-    scanner.popOrSyntaxError(']', 'Missing closing bracket on character class');
-    return result;
 }
 
 function _Atom(kind, value) {
@@ -584,33 +417,6 @@ Atom.CharacterClassEscape = {
     WORD: _Atom('AtomEscape', AtomEscape.CharacterClassEscape.WORD),
 };
 
-function parseAtom(scanner) {
-    if (scanner.tryPop('['))
-        return Atom.CharacterClass(parseCharacterClass(scanner));
-
-    if (scanner.tryPop('.'))
-        return Atom.DOT;
-
-    if (scanner.tryPop(BACKSLASH))
-        return _Atom('AtomEscape', parseAtomEscape(scanner));
-
-    if (scanner.tryPop('(')) {
-        var result;
-        if (scanner.tryPop('?', ':'))
-            result = Atom.NonCapturingGroup(parseDisjunction(scanner));
-        else
-            result = Atom.CapturingGroup(parseDisjunction(scanner));
-        if (!result)
-            throw new SyntaxError("Capturing group required");
-        scanner.popOrSyntaxError(')', 'Missing closing parenthesis on group');
-        return result;
-    }
-
-    if (PatternCharacter.BAD.has(scanner.next))
-        return;
-    return Atom.PatternCharacter(scanner.popLeft());
-}
-
 function Term(assertion, atom, quantifier) {
     if (assertion && assertion.nodeType !== 'Assertion')
         throw new Error('Bad assertion value: ' + assertion);
@@ -638,19 +444,6 @@ function Term(assertion, atom, quantifier) {
 Term.wrapAtom = function(atom, quantifier) { return Term(null, atom, quantifier); };
 Term.wrapAssertion = function(assertion) { return Term(assertion, null, null); }
 
-function parseTerm(scanner) {
-    if (!(scanner instanceof Object))
-        throw new Error('Bad scanner value: ' + scanner);
-    var assertion = parseAssertion(scanner);
-    if (assertion)
-        return Term.wrapAssertion(assertion);
-    var atom = parseAtom(scanner);
-    if (!atom)
-        return;
-    var quantifier = parseQuantifier(scanner);
-    return Term.wrapAtom(atom, quantifier);
-}
-
 function Alternative(term, alternative) {
     if (term && term.nodeType !== 'Term')
         throw new Error('Bad term value: ' + term);
@@ -674,22 +467,6 @@ function Alternative(term, alternative) {
 Alternative.EMPTY = Alternative();
 
 /**
- * Alternative ::= Term Alternative
- *               | ε
- */
-function parseAlternative(scanner) {
-    if (!(scanner instanceof Object))
-        throw new Error('Bad scanner value: ' + scanner);
-    if (scanner.length === 0)
-        return Alternative.EMPTY;
-    var term = parseTerm(scanner);
-    if (!term)
-        return;
-    var alternative = parseAlternative(scanner) || Alternative.EMPTY;
-    return Alternative(term, alternative);
-}
-
-/**
  * @param disjunction   Optional.
  */
 function Disjunction(alternative, disjunction) {
@@ -709,6 +486,256 @@ function Disjunction(alternative, disjunction) {
     };
 }
 
+function Pattern(disjunction) {
+    return {
+        nodeType: 'Pattern',
+        disjunction: disjunction,
+        toString: function() {
+            return this.nodeType + "(disjunction=" + this.disjunction + ")";
+        },
+    };
+}
+
+/********************
+ * Parsing routines *
+ ********************/
+
+/**
+ * @return  An assertion on success, null on failure.
+ * @post    The scanner will be advanced iff the parse is successful.
+ */
+function parseAssertion(scanner) {
+    if (scanner.tryPop('^'))
+        return Assertion.BOL;
+    if (scanner.tryPop('$'))
+        return Assertion.EOL;
+
+    if (scanner.next === BACKSLASH) {
+        if (scanner.tryPop(BACKSLASH, 'b'))
+            return Assertion.WB;
+        if (scanner.tryPop(BACKSLASH, 'B'))
+            return Assertion.NWB;
+        return; /* Character class or escaped source character. */
+    }
+
+    /* Assertion groups. */
+    if (!scanner.tryPop('(', '?'))
+        return;
+
+    if (scanner.tryPop('='))
+        return Assertion.ZeroWidthPositive(parseDisjunction(scanner));
+    if (scanner.tryPop('!'))
+        return Assertion.ZerWidthNegative(parseDisjunction(scanner));
+    throw new SyntaxError('Invalid assertion start: ' + scanner.next);
+}
+
+function parseQuantifier(scanner) {
+    var result;
+    switch (scanner.next) {
+      case '*': result = Quantifier.Star(); break;
+      case '+': result = Quantifier.Plus(); break;
+      case '?': result = Quantifier.Question(); break;
+      case '{':
+        scanner.popLeft();
+        var firstDigits = scanner.popDecimalDigits();
+        if (!firstDigits)
+            return;
+        if (!scanner.tryPop(',')) {
+            scanner.popOrSyntaxError('}', 'Expected closing brace on quantifier prefix');
+            return Quantifier.Fixed(scanner.tryPop('?'), firstDigits);
+        }
+
+        if (scanner.tryPop('}'))
+            return Quantifier.LowerBound(scanner.tryPop('?'), firstDigits);
+
+        throw new Error("Quantifier prefix range");
+
+      default:
+        return;
+    }
+    scanner.popLeft();
+    if (scanner.tryPop('?'))
+        result.lazy = true;
+    return result;
+}
+
+/**
+ * AtomEscape ::= DecimalEscape
+ *              | CharacterEscape
+ *              | CharacterClassEscape
+ *
+ * @note Backslash character has already been popped of the scanner.
+ */
+function parseAtomEscape(scanner) {
+    if (scanner.tryPop('d'))
+        return AtomEscape.CharacterClassEscape.DIGIT;
+    if (scanner.tryPop('D'))
+        return AtomEscape.CharacterClassEscape.NOT_DIGIT;
+    if (scanner.tryPop('s'))
+        return AtomEscape.CharacterClassEscape.SPACE;
+    if (scanner.tryPop('S'))
+        return AtomEscape.CharacterClassEscape.NOT_SPACE;
+    if (scanner.tryPop('w'))
+        return AtomEscape.CharacterClassEscape.WORD;
+    if (scanner.tryPop('W'))
+        return AtomEscape.CharacterClassEscape.NOT_WORD;
+
+    throw new Error("NYI: other kinds of escapes");
+}
+
+function parseClassEscape(scanner) {
+    if (scanner.tryPop('b')) // Interesting: backspace character!
+        return ClassEscape.BACKSPACE;
+    throw new Error("NYI: class escapes");
+}
+
+/**
+ * ClassAtomNoDash ::= SourceCharacter but not one of \ or ] or -
+ *                   | \ ClassEscape
+ */
+function parseClassAtomNoDash(scanner) {
+    parserLog.debug('parsing ClassAtomNoDash; rest: ' + uneval(scanner.rest));
+    if (scanner.tryPop(BACKSLASH))
+        return ClassAtomNoDash.ClassEscape(parseClassEscape(scanner));
+    if (Set(BACKSLASH, ']', '-').has(scanner.next))
+        throw new SyntaxError('Invalid ClassAtomNoDash source character: ' + uneval(scanner.rest));
+
+    parserLog.debug("Popping class-atom source-character: " + uneval(scanner.next));
+    return ClassAtomNoDash.SourceCharacter(scanner.popLeft());
+}
+
+/**
+ * ClassAtom ::= ClassAtomNoDash
+ *             | -
+ */
+function parseClassAtom(scanner) {
+    parserLog.debug('parsing ClassAtom; rest: ' + uneval(scanner.rest));
+
+    if (scanner.tryPop('-'))
+        return ClassAtom.DASH;
+
+    return ClassAtom.NoDash(parseClassAtomNoDash(scanner));
+}
+
+/*
+ * NonEmptyClassRangesNoDash ::= ClassAtom
+ *                             | ClassAtomNoDash NonemptyClassRangesNoDash
+ *                             | ClassAtomNoDash - ClassAtom ClassRanges
+ */
+function parseNonEmptyClassRangesNoDash(scanner) {
+    parserLog.debug('parsing NonEmptyClassRangesNoDash; rest: ' + uneval(scanner.rest));
+    var classAtomMaybeDash = parseClassAtom(scanner);
+    if (classAtomMaybeDash.kind === 'ClassAtom')
+        return NonEmptyClassRangesNoDash.ClassAtom(classAtomMaybeDash);
+    if (scanner.tryPop('-')) {
+        return NonEmptyClassRangesNoDash.Dashed(classAtomMaybeDash,
+                                                parseClassAtom(scanner),
+                                                parseClassRanges(scanner));
+    }
+    return NonEmptyClassRangesNoDash.NotDashed(classAtomMaybeDash,
+                                               parseNonEmptyClassRangesNoDash(scanner));
+}
+
+/*
+ * NonEmptyClassRanges ::= ClassAtom
+ *                       | ClassAtom NonemptyClassRangesNoDash
+ *                       | ClassAtom - ClassAtom ClassRanges
+ * @note    The ClassAtom production gets left-factored, so the closing bracket
+ *          is part of the FOLLOW set to check for this production to end.
+ */
+function parseNonEmptyClassRanges(scanner) {
+    parserLog.debug('parsing NonEmptyClassRanges; rest: ' + uneval(scanner.rest));
+    var classAtom = parseClassAtom(scanner);
+    if (scanner.tryPop(']'))
+        return NonEmptyClassRanges.NotDashed(classAtom);
+    if (scanner.tryPop('-')) {
+        return NonEmptyClassRanges.Dashed(classAtom,
+                                          parseClassAtom(scanner),
+                                          parseClassRanges(scanner));
+    }
+    return NonEmptyClassRanges.NotDashed(classAtom, parseNonEmptyClassRangesNoDash(scanner));
+}
+
+/**
+ * ClassRanges ::= [empty]
+ *               | NonemptyClassRanges
+ */
+function parseClassRanges(scanner) {
+    parserLog.debug('parsing ClassRanges; rest: ' + uneval(scanner.rest));
+    if (scanner.next === ']')
+        return ClassRanges.EMPTY;
+    return ClassRanges(parseNonEmptyClassRanges(scanner));
+}
+
+/**
+ * CharacterClass ::= [ [lookahead ∉ {^}] ClassRanges ]
+ *                  | [ ^ ClassRanges ]
+ */
+function parseCharacterClass(scanner) {
+    var inverted = scanner.tryPop('^');
+    // Interesting: [^] is a negation of the empty class range (grammatically permitted).
+    var classRanges = parseClassRanges(scanner);
+    var result = CharacterClass(classRanges, inverted);
+    scanner.popOrSyntaxError(']', 'Missing closing bracket on character class');
+    return result;
+}
+
+function parseAtom(scanner) {
+    if (scanner.tryPop('['))
+        return Atom.CharacterClass(parseCharacterClass(scanner));
+
+    if (scanner.tryPop('.'))
+        return Atom.DOT;
+
+    if (scanner.tryPop(BACKSLASH))
+        return _Atom('AtomEscape', parseAtomEscape(scanner));
+
+    if (scanner.tryPop('(')) {
+        var result;
+        if (scanner.tryPop('?', ':'))
+            result = Atom.NonCapturingGroup(parseDisjunction(scanner));
+        else
+            result = Atom.CapturingGroup(parseDisjunction(scanner));
+        if (!result)
+            throw new SyntaxError("Capturing group required");
+        scanner.popOrSyntaxError(')', 'Missing closing parenthesis on group');
+        return result;
+    }
+
+    if (PatternCharacter.BAD.has(scanner.next))
+        return;
+    return Atom.PatternCharacter(scanner.popLeft());
+}
+
+function parseTerm(scanner) {
+    if (!(scanner instanceof Object))
+        throw new Error('Bad scanner value: ' + scanner);
+    var assertion = parseAssertion(scanner);
+    if (assertion)
+        return Term.wrapAssertion(assertion);
+    var atom = parseAtom(scanner);
+    if (!atom)
+        return;
+    var quantifier = parseQuantifier(scanner);
+    return Term.wrapAtom(atom, quantifier);
+}
+
+/**
+ * Alternative ::= Term Alternative
+ *               | ε
+ */
+function parseAlternative(scanner) {
+    if (!(scanner instanceof Object))
+        throw new Error('Bad scanner value: ' + scanner);
+    if (scanner.length === 0)
+        return Alternative.EMPTY;
+    var term = parseTerm(scanner);
+    if (!term)
+        return;
+    var alternative = parseAlternative(scanner) || Alternative.EMPTY;
+    return Alternative(term, alternative);
+}
+
 /**
  * Disjunction ::= Alternative
  *               | Alternative "|" Disjunction
@@ -722,16 +749,6 @@ function parseDisjunction(scanner) {
     return Disjunction(lhs);
 }
 
-function Pattern(disjunction) {
-    return {
-        nodeType: 'Pattern',
-        disjunction: disjunction,
-        toString: function() {
-            return this.nodeType + "(disjunction=" + this.disjunction + ")";
-        },
-    };
-}
-
 function parse(scanner) {
     if (!(scanner instanceof Object))
         throw new Error('Bad scanner value: ' + scanner);
@@ -740,7 +757,9 @@ function parse(scanner) {
 
 function makeAST(pattern) { return parse(Scanner(pattern)); }
 
-/* Tests */
+/*********
+ * Tests *
+ *********/
 
 var TestConstructors = {
     Dis: Disjunction,
@@ -813,8 +832,6 @@ var TestConstructors = {
 function makeTestCases() {
     with (TestConstructors) {
         var disabled = {
-        };
-        return {
             /* Flat pattern. */
             'ab': PatDis(PCAlt('ab')),
             /* Alternation */
@@ -839,12 +856,17 @@ function makeTestCases() {
             '^abcdef$': PatDis(AssAlt.BOLConcat(PCAlt('abcdef', AssAlt.EOL))),
             /* Builtin character classes. */
             '\\w': PatDis(CCEAlt.WORD),
+            /* Character classes. */
             '[a-c]': PatDis(CCAlt('a', 'c')),
-            /* Grouping assertions. */
-            //'ca(?!t)\\w': PatDis(PCAlt
-
             '(a*|b)': PatDis(CGAlt(Dis(QPCAlt('a', 'Star'), Dis(PCAlt('b'))))),
             'f(.)z': PatDis(PCAlt('f', CGAlt(Dis(DOT_ALT), PCAlt('z')))),
+            //'ca(?!t)\\w': PatDis(PCAlt
+            // TODO: grouping assertions.
+        };
+        // TODO: turn into two-tuples so that regexp literals can be used.
+        return {
+            '[^ab]': PatDis(CCAlt('a', 'b')),
+
         };
     }
 }
