@@ -26,9 +26,12 @@ var parserLog = new Logger('Parser');
 function ord(c) { return c.charCodeAt(0); }
 
 function Scanner(pattern) {
+    var log = new Logger("Scanner");
     var index = 0;
     var cc0 = ord('0');
     var cc9 = ord('9');
+
+    /** Convert a digit character into its integral form. */
     var toDigit = function(c) {
         var ccc = ord(c);
         // TODO: test corner case with leading zeros.
@@ -36,7 +39,7 @@ function Scanner(pattern) {
             return ccc - cc0;
         throw new Error("Non-digit character: " + c);
     };
-    var log = new Logger("Scanner");
+
     var self = {
         tryPop: function() {
             var indexBefore = index;
@@ -100,15 +103,10 @@ function Scanner(pattern) {
             return 'Scanner(pattern=' + uneval(pattern) + ', index=' + index + ')';
         },
     };
-    Object.defineProperty(self, 'next', {
-        get: function() { return pattern[index]; }
-    });
-    Object.defineProperty(self, 'length', {
-        get: function() { return pattern.length - index; }
-    });
-    Object.defineProperty(self, 'rest', {
-        get: function() { return pattern.substr(index); }
-    });
+
+    Object.defineProperty(self, 'next', {get: function() { return pattern[index]; }});
+    Object.defineProperty(self, 'length', {get: function() { return pattern.length - index; }});
+    Object.defineProperty(self, 'rest', {get: function() { return pattern.substr(index); }});
     return self;
 }
 
@@ -233,50 +231,56 @@ CharacterClassEscape.KINDS = Set('Word', 'NotWord', 'Digit', 'NotDigit',
                                  'Space', 'NotSpace');
 CharacterClassEscape.WORD = CharacterClassEscape('Word');
 
-function _AtomEscape(decimalEscape, characterEscape, characterClassEscape) {
+var AtomEscape = (function() {
+    function AtomEscape(decimalEscape, characterEscape, characterClassEscape) {
+        return {
+            nodeType: "AtomEscape",
+            decimalEscape: decimalEscape,
+            characterEscape: characterEscape,
+            characterClassEscape: characterClassEscape,
+            toString: function() {
+                return this.nodeType + "(decimalEscape=" + this.decimalEscape
+                        + ", characterEscape=" + this.characterEscape
+                        + ", characterClassEscape=" + this.characterClassEscape
+                        + ")";
+            },
+        };
+    }
+
     return {
-        nodeType: "AtomEscape",
-        decimalEscape: decimalEscape,
-        characterEscape: characterEscape,
-        characterClassEscape: characterClassEscape,
-        toString: function() {
-            return this.nodeType + "(decimalEscape=" + this.decimalEscape
-                    + ", characterEscape=" + this.characterEscape
-                    + ", characterClassEscape=" + this.characterClassEscape
-                    + ")";
+        CharacterClassEscape: {
+            DIGIT: AtomEscape(undefined, undefined, CharacterClassEscape('Digit')),
+            NOT_DIGIT: AtomEscape(undefined, undefined, CharacterClassEscape('NotDigit')),
+            SPACE: AtomEscape(undefined, undefined, CharacterClassEscape('Space')),
+            NOT_SPACE: AtomEscape(undefined, undefined, CharacterClassEscape('NotSpace')),
+            WORD: AtomEscape(undefined, undefined, CharacterClassEscape('Word')),
+            NOT_WORD: AtomEscape(undefined, undefined, CharacterClassEscape('NotWord')),
         },
     };
-}
+})();
 
-var AtomEscape = {
-    CharacterClassEscape: {
-        DIGIT: _AtomEscape(undefined, undefined, CharacterClassEscape('Digit')),
-        NOT_DIGIT: _AtomEscape(undefined, undefined, CharacterClassEscape('NotDigit')),
-        SPACE: _AtomEscape(undefined, undefined, CharacterClassEscape('Space')),
-        NOT_SPACE: _AtomEscape(undefined, undefined, CharacterClassEscape('NotSpace')),
-        WORD: _AtomEscape(undefined, undefined, CharacterClassEscape('Word')),
-        NOT_WORD: _AtomEscape(undefined, undefined, CharacterClassEscape('NotWord')),
-    },
-};
+var ClassAtomNoDash = (function() {
+    var kinds = Set('ClassEscape', 'SourceCharacter');
 
-function _ClassAtomNoDash(kind, value) {
-    if (!ClassAtomNoDash.KINDS.has(kind))
-        throw new Error("Bad kind for ClassAtomNoDash: " + kind);
+    function ClassAtomNoDash(kind, value) {
+        if (!kinds.has(kind))
+            throw new Error("Bad kind for ClassAtomNoDash: " + kind);
+
+        return {
+            nodeType: 'ClassAtomNoDash',
+            kind: kind,
+            value: value,
+            toString: function() {
+                return this.nodeType + '.' + this.kind + '(' + this.value + ')';
+            }
+        };
+    }
 
     return {
-        nodeType: 'ClassAtomNoDash',
-        kind: kind,
-        value: value,
-        toString: function() {
-            return this.nodeType + '.' + this.kind + '(' + this.value + ')';
-        }
+        ClassEscape: function(ce) { return ClassAtomNoDash('ClassEscape', ce); },
+        SourceCharacter: function(c) { return ClassAtomNoDash('SourceCharacter', c); }
     };
-}
-
-var ClassAtomNoDash = {KINDS: Set('ClassEscape', 'SourceCharacter')};
-
-ClassAtomNoDash.ClassEscape = function(ce) { return _ClassAtomNoDash('ClassEscape', ce); };
-ClassAtomNoDash.SourceCharacter = function(c) { return _ClassAtomNoDash('SourceCharacter', c); };
+})();
 
 var ClassAtom = (function() {
     var kinds = Set('Dash', 'NoDash');
