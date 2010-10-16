@@ -278,84 +278,93 @@ var ClassAtomNoDash = {KINDS: Set('ClassEscape', 'SourceCharacter')};
 ClassAtomNoDash.ClassEscape = function(ce) { return _ClassAtomNoDash('ClassEscape', ce); };
 ClassAtomNoDash.SourceCharacter = function(c) { return _ClassAtomNoDash('SourceCharacter', c); };
 
-function _ClassAtom(kind, value) {
-    if (!ClassAtom.KINDS.has(kind))
-        throw new Error("Bad kind for class atom: " + kind);
+var ClassAtom = (function() {
+    var kinds = Set('Dash', 'NoDash');
 
-    return {
-        nodeType: 'ClassAtom',
-        kind: kind,
-        value: value,
-        toString: function() {
-            if (this.kind === 'Dash') {
-                if (this.value)
-                    throw new Error("Should not have a value for the dash kind.");
-                return this.nodeType + '.DASH';
+    function ClassAtom(kind, value) {
+        if (!kinds.has(kind))
+            throw new Error("Bad kind for class atom: " + kind);
+        if (kind === 'NoDash' && value.nodeType !== 'ClassAtomNoDash')
+            throw new Error("Unexpected value for non-dash ClassAtom: " + value);
+
+        return {
+            nodeType: 'ClassAtom',
+            kind: kind,
+            value: value,
+            toString: function() {
+                if (this.kind === 'Dash') {
+                    if (this.value)
+                        throw new Error("Should not have a value for the dash kind.");
+                    return this.nodeType + '.DASH';
+                }
+                return this.nodeType + '(' + this.value + ')';
             }
-            return this.nodeType + '(' + this.value + ')';
-        }
-    };
-}
-
-var ClassAtom = {KINDS: Set('Dash', 'NoDash')};
-
-ClassAtom.DASH = _ClassAtom('Dash');
-ClassAtom.NoDash = function(value) { return _ClassAtom('NoDash', value); }
-
-function _NonEmptyClassRangesNoDash(kind, classAtom, value) {
-    if (!NonEmptyClassRangesNoDash.KINDS.has(kind))
-        throw new Error("Bad NonemptyClassRangesNoDash kind: " + kind);
-
-    return {
-        nodeType: 'NonEmptyClassRangesNoDash',
-        kind: kind,
-        classAtom: classAtom,
-        value: value,
-    };
-}
-
-var NonEmptyClassRangesNoDash = {
-    KINDS: Set('ClassAtom', 'Dashed', 'NotDashed'),
-};
-
-NonEmptyClassRangesNoDash.ClassAtom = function(classAtom) {
-    return _NonEmptyClassRangesNoDash('ClassAtom', classAtom);
-}
-
-NonEmptyClassRangesNoDash.Dashed = function(classAtom, otherClassAtom, classRanges) {
-    return _NonEmptyClassRangesNoDash('Dashed', classAtom, [otherClassAtom, classRanges]);
-}
-
-NonEmptyClassRangesNoDash.NotDashed = function(classAtom, nonEmptyClassRangesNoDash) {
-    return _NonEmptyClassRangesNoDash('NotDashed', classAtom, nonEmptyClassRangesNoDash);
-}
-
-function _NonEmptyClassRanges(kind, classAtom, value) {
-    if (!NonEmptyClassRanges.KINDS.has(kind))
-        throw new Error("Bad non-empty class ranges kind: " + kind);
-
-    return {
-        nodeType: 'NonEmptyClassRanges',
-        kind: kind,
-        classAtom: classAtom,
-        value: value,
-        toString: function() {
-            var result = this.nodeType + '.' + this.kind + '(classAtom='
-                         + this.classAtom + ", ...)";
-            return result;
-        }
-    };
-}
-
-var NonEmptyClassRanges = {
-    KINDS: Set('Dash', 'NoDash'),
-    Dashed: function(classAtom, otherClassAtom, classRanges) {
-        return _NonEmptyClassRanges('Dash', classAtom, [otherClassAtom, classRanges]);
-    },
-    NotDashed: function(classAtom, nonEmptyClassRangesNoDash) {
-        return _NonEmptyClassRanges('NoDash', classAtom, nonEmptyClassRangesNoDash);
+        };
     }
-};
+
+    return {
+        DASH: ClassAtom('Dash'),
+        NoDash: function(value) { return ClassAtom('NoDash', value); },
+    };
+})();
+
+var NonemptyClassRangesNoDash = (function() {
+    var kinds = Set('ClassAtom', 'Dashed', 'NotDashed');
+
+    function NonemptyClassRangesNoDash(kind, classAtom, value) {
+        if (!kinds.has(kind))
+            throw new Error("Bad NonemptyClassRangesNoDash kind: " + kind);
+
+        return {
+            nodeType: 'NonemptyClassRangesNoDash',
+            kind: kind,
+            classAtom: classAtom,
+            value: value,
+        };
+    }
+
+    return {
+        ClassAtom: function(classAtom) {
+            return NonemptyClassRangesNoDash('ClassAtom', classAtom);
+        },
+        Dashed: function(classAtom, otherClassAtom, classRanges) {
+            return NonemptyClassRangesNoDash('Dashed', classAtom, [otherClassAtom, classRanges]);
+        },
+        NotDashed: function(classAtom, nonEmptyClassRangesNoDash) {
+            return NonemptyClassRangesNoDash('NotDashed', classAtom, nonEmptyClassRangesNoDash);
+        }
+    };
+})();
+
+var NonemptyClassRanges = (function() {
+    var kinds = Set('Dash', 'NoDash');
+
+    function NonemptyClassRanges(kind, classAtom, value) {
+        if (!kinds.has(kind))
+            throw new Error("Bad non-empty class ranges kind: " + kind);
+
+        return {
+            nodeType: 'NonemptyClassRanges',
+            kind: kind,
+            classAtom: classAtom,
+            value: value,
+            toString: function() {
+                var result = this.nodeType + '.' + this.kind + '(classAtom='
+                             + this.classAtom + ", ...)";
+                return result;
+            }
+        };
+    }
+
+    return {
+        Dashed: function(classAtom, otherClassAtom, classRanges) {
+            return NonemptyClassRanges('Dash', classAtom, [otherClassAtom, classRanges]);
+        },
+        NotDashed: function(classAtom, nonEmptyClassRangesNoDash) {
+            return NonemptyClassRanges('NoDash', classAtom, nonEmptyClassRangesNoDash);
+        }
+    };
+})();
 
 function ClassRanges(value) {
     return {
@@ -415,6 +424,7 @@ var Atom = (function() {
         CharacterClassEscape: {
             WORD: Atom('AtomEscape', AtomEscape.CharacterClassEscape.WORD),
         },
+        AtomEscape: function(ae) { return Atom('AtomEscape', ae); },
     };
 })();
 
@@ -619,42 +629,51 @@ function parseClassAtom(scanner) {
 }
 
 /*
- * NonEmptyClassRangesNoDash ::= ClassAtom
- *                             | ClassAtomNoDash NonemptyClassRangesNoDash
+ * NonemptyClassRangesNoDash ::= ClassAtom
  *                             | ClassAtomNoDash - ClassAtom ClassRanges
+ *                             | ClassAtomNoDash NonemptyClassRangesNoDash
  */
-function parseNonEmptyClassRangesNoDash(scanner) {
-    parserLog.debug('parsing NonEmptyClassRangesNoDash; rest: ' + uneval(scanner.rest));
-    var classAtomMaybeDash = parseClassAtom(scanner);
-    if (classAtomMaybeDash.kind === 'ClassAtom')
-        return NonEmptyClassRangesNoDash.ClassAtom(classAtomMaybeDash);
+function parseNonemptyClassRangesNoDash(scanner) {
+    parserLog.debug('parsing NonemptyClassRangesNoDash; rest: ' + uneval(scanner.rest));
+    if (scanner.next === '-') {
+        var classAtom = parseClassAtom(scanner);
+        parserLog.debug('parsing NonemptyClassRangesNoDash; got ClassAtom; rest: '
+                        + uneval(scanner.rest));
+        return NonemptyClassRangesNoDash.ClassAtom(classAtom);
+    }
+    var cand = parseClassAtomNoDash(scanner);
+    if (scanner.next === ']')
+        return NonemptyClassRangesNoDash.ClassAtom(cand);
+    parserLog.debug('parsing NonemptyClassRangesNoDash; got ClassAtomNoDash; rest: '
+                    + uneval(scanner.rest));
     if (scanner.tryPop('-')) {
-        return NonEmptyClassRangesNoDash.Dashed(classAtomMaybeDash,
+        return NonemptyClassRangesNoDash.Dashed(cand,
                                                 parseClassAtom(scanner),
                                                 parseClassRanges(scanner));
     }
-    return NonEmptyClassRangesNoDash.NotDashed(classAtomMaybeDash,
-                                               parseNonEmptyClassRangesNoDash(scanner));
+    return NonemptyClassRangesNoDash.NotDashed(cand,
+                                               parseNonemptyClassRangesNoDash(scanner));
 }
 
 /*
- * NonEmptyClassRanges ::= ClassAtom
+ * NonemptyClassRanges ::= ClassAtom
  *                       | ClassAtom NonemptyClassRangesNoDash
  *                       | ClassAtom - ClassAtom ClassRanges
  * @note    The ClassAtom production gets left-factored, so the closing bracket
  *          is part of the FOLLOW set to check for this production to end.
  */
-function parseNonEmptyClassRanges(scanner) {
-    parserLog.debug('parsing NonEmptyClassRanges; rest: ' + uneval(scanner.rest));
+function parseNonemptyClassRanges(scanner) {
+    parserLog.debug('parsing NonemptyClassRanges; rest: ' + uneval(scanner.rest));
     var classAtom = parseClassAtom(scanner);
+    parserLog.debug('parsing NonemptyClassRanges; got ClassAtom; rest: ' + uneval(scanner.rest));
     if (scanner.tryPop(']'))
-        return NonEmptyClassRanges.NotDashed(classAtom);
+        return NonemptyClassRanges.NotDashed(classAtom);
     if (scanner.tryPop('-')) {
-        return NonEmptyClassRanges.Dashed(classAtom,
+        return NonemptyClassRanges.Dashed(classAtom,
                                           parseClassAtom(scanner),
                                           parseClassRanges(scanner));
     }
-    return NonEmptyClassRanges.NotDashed(classAtom, parseNonEmptyClassRangesNoDash(scanner));
+    return NonemptyClassRanges.NotDashed(classAtom, parseNonemptyClassRangesNoDash(scanner));
 }
 
 /**
@@ -665,7 +684,7 @@ function parseClassRanges(scanner) {
     parserLog.debug('parsing ClassRanges; rest: ' + uneval(scanner.rest));
     if (scanner.next === ']')
         return ClassRanges.EMPTY;
-    return ClassRanges(parseNonEmptyClassRanges(scanner));
+    return ClassRanges(parseNonemptyClassRanges(scanner));
 }
 
 /**
@@ -673,9 +692,11 @@ function parseClassRanges(scanner) {
  *                  | [ ^ ClassRanges ]
  */
 function parseCharacterClass(scanner) {
+    parserLog.debug('parsing CharacterClass; rest: ' + uneval(scanner.rest));
     var inverted = scanner.tryPop('^');
     // Interesting: [^] is a negation of the empty class range (grammatically permitted).
     var classRanges = parseClassRanges(scanner);
+    parserLog.debug('parsing CharacterClass; got ClassRanges; rest: ' + uneval(scanner.rest));
     var result = CharacterClass(classRanges, inverted);
     scanner.popOrSyntaxError(']', 'Missing closing bracket on character class');
     return result;
@@ -689,7 +710,7 @@ function parseAtom(scanner) {
         return Atom.DOT;
 
     if (scanner.tryPop(BACKSLASH))
-        return _Atom('AtomEscape', parseAtomEscape(scanner));
+        return Atom.AtomEscape(parseAtomEscape(scanner));
 
     if (scanner.tryPop('(')) {
         var result;
@@ -809,19 +830,35 @@ var TestConstructors = {
         },
         EOL: Alternative(Term.wrapAssertion(Assertion.EOL)),
     },
-    /** Character class alternative. */
-    CCAlt: function(low, high) {
+    /** Character class range alternative. */
+    CCRAlt: function(low, high, inverted) {
         return Alternative(Term.wrapAtom(Atom.CharacterClass(
             CharacterClass(
                 ClassRanges(
-                    NonEmptyClassRanges.Dashed(
+                    NonemptyClassRanges.Dashed(
                         ClassAtom.NoDash(ClassAtomNoDash.SourceCharacter(low)),
                         ClassAtom.NoDash(ClassAtomNoDash.SourceCharacter(high)),
                         ClassRanges.EMPTY
                     )
                 ),
-                false
+                !!inverted
             )
+        )));
+    },
+    CCAlt: function(chars, inverted) {
+        var necr = NonemptyClassRanges.NotDashed(ClassAtom.NoDash(
+            ClassAtomNoDash.SourceCharacter(chars[0]))
+        );
+        var iterNECR = necr;
+        for (var i = 1; i < chars.length; ++i) {
+            /* The last NonemptyClassRangesNoDash has to be a class atom. */
+            iterNECR.value = (i === chars.length - 1)
+                ? NonemptyClassRangesNoDash.ClassAtom(ClassAtomNoDash.SourceCharacter(chars[i]))
+                : NonemptyClassRangesNoDash.NotDashed(ClassAtomNoDash.SourceCharacter(chars[i]));
+            iterNECR = iterNECR.value;
+        }
+        return Alternative(Term.wrapAtom(Atom.CharacterClass(
+            CharacterClass(ClassRanges(necr), inverted)
         )));
     },
     CCEAlt: {
@@ -833,6 +870,11 @@ var TestConstructors = {
 function makeTestCases() {
     with (TestConstructors) {
         var disabled = {
+            //'ca(?!t)\\w': PatDis(PCAlt
+            // TODO: grouping assertions.
+        };
+        // TODO: turn into two-tuples so that regexp literals can be used.
+        return {
             /* Flat pattern. */
             'ab': PatDis(PCAlt('ab')),
             /* Alternation */
@@ -858,16 +900,12 @@ function makeTestCases() {
             /* Builtin character classes. */
             '\\w': PatDis(CCEAlt.WORD),
             /* Character classes. */
-            '[a-c]': PatDis(CCAlt('a', 'c')),
+            '[a-c]': PatDis(CCRAlt('a', 'c')),
+            '[^a-d]': PatDis(CCRAlt('a', 'd', true)),
+            '[^ab]': PatDis(CCAlt(['a', 'b'], true)),
+
             '(a*|b)': PatDis(CGAlt(Dis(QPCAlt('a', 'Star'), Dis(PCAlt('b'))))),
             'f(.)z': PatDis(PCAlt('f', CGAlt(Dis(DOT_ALT), PCAlt('z')))),
-            //'ca(?!t)\\w': PatDis(PCAlt
-            // TODO: grouping assertions.
-        };
-        // TODO: turn into two-tuples so that regexp literals can be used.
-        return {
-            '[^ab]': PatDis(CCAlt('a', 'b')),
-
         };
     }
 }

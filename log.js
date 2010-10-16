@@ -7,7 +7,7 @@ var LogLevel = {
     NONE: 0,
 };
 
-var LOG_LEVEL = LogLevel.DEBUG;
+var LOG_LEVEL = LogLevel.NONE;
 
 function Logger(name) {
     this.name = name;
