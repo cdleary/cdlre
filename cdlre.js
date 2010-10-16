@@ -91,6 +91,8 @@ function checkMatchResults(host, guest) {
         return false;
     }
     var ok = true;
+    if ((host === null) && (guest === null))
+        return ok;
     var check = function(attr) {
         var hostValue = host[attr];
         var guestValue = guest[attr];
@@ -137,6 +139,89 @@ function testCDLRE() {
         [/la/, 'blah'],
         [/a*h/, 'blah'],
         [/m(o{2,})cow/, 'mooooocow'],
+        [/x86_64/, "x86_64-gcc3"],
+        [/x86_64/, "x86_64-gcc3"],
+        [/x86_64/, "x86_64-gcc3"],
+        /*
+        [/(a|d|q|)x/i, "bcaDxqy"],
+        [/(a|d|q|)x/i, "bcaDxqy"],
+        [/(a|d|q|)x/i, "bcaDxqy"],
+        [/(a|d|q|)x/i, "bcaDxqy"],
+        [/(a|d|q|)x/i, "bcaDxqy"],
+        */
+        /*
+        [/(a|(e|q))(x|y)/, "bcaddxqy"],
+        [/(a|(e|q))(x|y)/, "bcaddxqy"],
+        [/(a|(e|q))(x|y)/, "bcaddxqy"],
+        [/(a|(e|q))(x|y)/, "bcaddxqy"],
+        [/(a|(e|q))(x|y)/, "bcaddxqy"],
+        [/a+b+d/, "aabbeeaabbs"],
+        [/a+b+d/, "aabbeeaabbs"],
+        [/a*b/, "aaadaabaaa"],
+        [/a*b/, "aaadaabaaa"],
+        [/a*b/, "aaadaabaaa"],
+        [/a*b/, "aaadaabaaa"],
+        [/a*b/, "aaadaabaaa"],
+        [/a*b/, "dddb"],
+        [/a*b/, "dddb"],
+        [/a*b/, "dddb"],
+        [/a*b/, "dddb"],
+        [/a*b/, "dddb"],
+        [/a*b/, "xxx"],
+        [/a*b/, "xxx"],
+        [/x\d\dy/, "abcx45ysss235"],
+        [/x\d\dy/, "abcx45ysss235"],
+        [/x\d\dy/, "abcx45ysss235"],
+        [/x\d\dy/, "abcx45ysss235"],
+        [/x\d\dy/, "abcx45ysss235"],
+        */
+        [/[^abc]def[abc]+/, "abxdefbb"],
+        [/[^abc]def[abc]+/, "abxdefbb"],
+        [/[^abc]def[abc]+/, "abxdefbb"],
+        [/[^abc]def[abc]+/, "abxdefbb"],
+        [/[^abc]def[abc]+/, "abxdefbb"],
+        [/(a*)baa/, "ccdaaabaxaabaa"],
+        [/(a*)baa/, "ccdaaabaxaabaa"],
+        [/(a*)baa/, "ccdaaabaxaabaa"],
+        [/(a*)baa/, "ccdaaabaxaabaa"],
+        [/(a*)baa/, "ccdaaabaxaabaa"],
+        [/(a*)baa/, "aabaa"],
+        [/(a*)baa/, "aabaa"],
+        [/(a*)baa/, "aabaa"],
+        [/(a*)baa/, "aabaa"],
+        [/(a*)baa/, "aabaa"],
+        [/q(a|b)*q/, "xxqababqyy"],
+        [/q(a|b)*q/, "xxqababqyy"],
+        [/q(a|b)*q/, "xxqababqyy"],
+        [/q(a|b)*q/, "xxqababqyy"],
+        [/q(a|b)*q/, "xxqababqyy"],
+        //[/(a(.|[^d])c)*/, "adcaxc"],
+        //[/(a(.|[^d])c)*/, "adcaxc"],
+        //[/(a(.|[^d])c)*/, "adcaxc"],
+        //[/(a(.|[^d])c)*/, "adcaxc"],
+        //[/(a(.|[^d])c)*/, "adcaxc"],
+        /*
+        [/(a*)b\1/, "abaaaxaabaayy"],
+        [/(a*)b\1/, "abaaaxaabaayy"],
+        [/(a*)b\1/, "abaaaxaabaayy"],
+        [/(a*)b\1/, "abaaaxaabaayy"],
+        [/(a*)b\1/, "abaaaxaabaayy"],
+        [/(a*)b\1/, "abaaaxaabaayy"],
+        [/(a*)b\1/, "abaaaxaabaayy"],
+        [/(a*)b\1/, "abaaaxaabaayy"],
+        [/(a*)b\1/, "abaaaxaabaayy"],
+        [/(a*)b\1/, "abaaaxaabaayy"],
+        [/(a*)b\1/, "cccdaaabaxaabaayy"],
+        [/(a*)b\1/, "cccdaaabaxaabaayy"],
+        [/(a*)b\1/, "cccdaaabaxaabaayy"],
+        [/(a*)b\1/, "cccdaaabaxaabaayy"],
+        [/(a*)b\1/, "cccdaaabaxaabaayy"],
+        [/(a*)b\1/, "cccdaaabqxaabaayy"],
+        [/(a*)b\1/, "cccdaaabqxaabaayy"],
+        [/(a*)b\1/, "cccdaaabqxaabaayy"],
+        [/(a*)b\1/, "cccdaaabqxaabaayy"],
+        [/(a*)b\1/, "cccdaaabqxaabaayy"],
+        */
     ];
     for (var i = 0; i < tests.length; ++i) {
         var test = tests[i];

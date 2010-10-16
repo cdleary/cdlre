@@ -1,24 +1,36 @@
 /**
  * Parses regular expression patterns to ASTs.
+ *
+ * @note    Some of the identifiers in this code are heinous.
+ *          I'm trying to follow the spec as closely as possible
+ *          without being totally ridiculous, so you might want to read along
+ *          with that.
  */
 
 if (typeof uneval === 'undefined') {
+    /* 
+     * FIXME:   Care about this more when it actually runs in more than
+     *          one browser...
+     */
     uneval = function(obj) {
         if (typeof obj === 'string') {
-            return '"' + obj + '"'; // HACK;
+            return '"' + obj + '"';
         }
         throw new Error("NYI");
     };
 }
 
 var BACKSLASH = '\\';
+var parserLog = new Logger('Parser');
+
+function ord(c) { return c.charCodeAt(0); }
 
 function Scanner(pattern) {
     var index = 0;
-    var cc0 = '0'.charCodeAt(0);
-    var cc9 = '9'.charCodeAt(0);
+    var cc0 = ord('0');
+    var cc9 = ord('9');
     var toDigit = function(c) {
-        var ccc = c.charCodeAt(0);
+        var ccc = ord(c);
         // TODO: test corner case with leading zeros.
         if (cc0 <= ccc && ccc <= cc9)
             return ccc - cc0;
@@ -26,26 +38,6 @@ function Scanner(pattern) {
     };
     var log = new Logger("Scanner");
     var self = {
-        lookAhead: function(howMany) {
-            if (howMany === undefined)
-                howMany = 1;
-            return pattern[index + howMany];
-        },
-        /**
-         * Look ahead for all the character arguments -- on match, pop them.
-         * Return whether popping occurred.
-         */
-        popLookAhead: function() {
-            for (var i = 0; i < arguments.length; ++i) {
-                var targetChar = arguments[i];
-                if (targetChar.length !== 1)
-                    throw new Error("Bad target character value: " + targetChar);
-                if (targetChar !== pattern[index + i])
-                    return false;
-            }
-            index += arguments.length;
-            return true;
-        },
         tryPop: function() {
             var indexBefore = index;
             for (var i = 0; i < arguments.length; ++i) {
@@ -73,11 +65,6 @@ function Scanner(pattern) {
                 throw new Error("Popping past end of input");
             log.debug("popLeft: " + pattern[index]);
             return pattern[index++];
-        },
-        popLeftAndLookAhead: function(howMany) {
-            if (howMany === undefined)
-                howMany = 1;
-            index += 1 + howMany;
         },
         /** Throw a SyntaxError when non-optional and a decimal digit is not found. */
         popDecimalDigit: function(optional) {
@@ -353,9 +340,217 @@ function parseAtomEscape(scanner) {
     throw new Error("NYI: other kinds of escapes");
 }
 
+function parseClassEscape(scanner) {
+    if (scanner.tryPop('b')) // Interesting: backspace character!
+        return ClassEscape.BACKSPACE;
+    throw new Error("NYI: class escapes");
+}
+
+function _ClassAtomNoDash(kind, value) {
+    if (!ClassAtomNoDash.KINDS.has(kind))
+        throw new Error("Bad kind for ClassAtomNoDash: " + kind);
+
+    return {
+        nodeType: 'ClassAtomNoDash',
+        kind: kind,
+        value: value,
+        toString: function() {
+            return this.nodeType + '.' + this.kind + '(' + this.value + ')';
+        }
+    };
+}
+
+var ClassAtomNoDash = {KINDS: Set('ClassEscape', 'SourceCharacter')};
+
+ClassAtomNoDash.ClassEscape = function(ce) { return _ClassAtomNoDash('ClassEscape', ce); };
+ClassAtomNoDash.SourceCharacter = function(c) { return _ClassAtomNoDash('SourceCharacter', c); };
+
+/**
+ * ClassAtomNoDash ::= SourceCharacter but not one of \ or ] or -
+ *                   | \ ClassEscape
+ */
+function parseClassAtomNoDash(scanner) {
+    parserLog.info('parsing ClassAtomNoDash');
+    if (scanner.tryPop(BACKSLASH))
+        return ClassAtomNoDash.ClassEscape(parseClassEscape(scanner));
+    if (Set(BACKSLASH, ']', '-').has(scanner.next))
+        throw new SyntaxError('Invalid ClassAtomNoDash source character');
+
+    return ClassAtomNoDash.SourceCharacter(scanner.popLeft());
+}
+
+function _ClassAtom(kind, value) {
+    if (!ClassAtom.KINDS.has(kind))
+        throw new Error("Bad kind for class atom: " + kind);
+
+    return {
+        nodeType: 'ClassAtom',
+        kind: kind,
+        value: value,
+        toString: function() {
+            if (this.kind === 'Dash') {
+                if (this.value)
+                    throw new Error("Should not have a value for the dash kind.");
+                return this.nodeType + '.DASH';
+            }
+            return this.nodeType + '(' + this.value + ')';
+        }
+    };
+}
+
+var ClassAtom = {KINDS: Set('Dash', 'NoDash')};
+
+ClassAtom.DASH = _ClassAtom('Dash');
+ClassAtom.NoDash = function(value) { return _ClassAtom('NoDash', value); }
+
+
+function parseClassAtom(scanner) {
+    if (scanner.tryPop('-'))
+        return ClassAtom.DASH;
+
+    return ClassAtom.NoDash(parseClassAtomNoDash(scanner));
+}
+
+function _NonEmptyClassRanges(kind, classAtom, value) {
+    if (!NonEmptyClassRanges.KINDS.has(kind))
+        throw new Error("Bad non-empty class ranges kind: " + kind);
+
+    return {
+        nodeType: 'NonEmptyClassRanges',
+        kind: kind,
+        classAtom: classAtom,
+        value: value,
+        toString: function() {
+            var result = this.nodeType + '.' + this.kind + '(classAtom='
+                         + this.classAtom + ", ...)";
+            return result;
+        }
+    };
+}
+
+function _NonEmptyClassRangesNoDash(kind, classAtom, value) {
+    if (!NonemptyClassRangesNoDash.has(kind))
+        throw new Error("Bad NonemptyClassRangesNoDash kind: " + kind);
+
+    return {
+        nodeType: 'NonEmptyClassRangesNoDash',
+        kind: kind,
+        classAtom: classAtom,
+        value: value,
+    };
+}
+
+var NonEmptyClassRangesNoDash = {
+    KINDS: Set('ClassAtom', 'Dashed', 'NotDashed'),
+};
+
+NonEmptyClassRangesNoDash.ClassAtom = function(classAtom) {
+    return _NonEmptyClassRangesNoDash('ClassAtom', classAtom);
+}
+
+NonEmptyClassRangesNoDash.Dashed = function(classAtom, otherClassAtom, classRanges) {
+    return _NonEmptyClassRangesNoDash('Dashed', classAtom, [otherClassAtom, classRanges]);
+}
+
+NonEmptyClassRangesNoDash.NotDashed = function(classAtom, nonEmptyClassRangesNoDash) {
+    return _NonEmptyClassRangesNoDash('NotDashed', classAtom, nonEmptyClassRangesNoDash);
+}
+
+/*
+ * NonEmptyClassRangesNoDash ::= ClassAtom
+ *                             | ClassAtomNoDash NonemptyClassRangesNoDash
+ *                             | ClassAtomNoDash - ClassAtom ClassRanges
+ */
+function parseNonEmptyClassRangesNoDash(scanner) {
+    var classAtomMaybeDash = parseClassAtom(scanner);
+    if (classAtomMaybeDash.kind === 'ClassAtom')
+        return NonEmptyClassRangesNoDash.ClassAtom(classAtomMaybeDash);
+    if (scanner.tryPop('-')) {
+        return NonEmptyClassRangesNoDash.Dashed(classAtomMaybeDash,
+                                                parseClassAtom(scanner),
+                                                parseClassRanges(scanner));
+    }
+    return NonEmptyClassRangesNoDash.NotDashed(classAtomMaybeDash,
+                                               parseNonEmptyClassRangesNoDash(scanner));
+}
+
+var NonEmptyClassRanges = {
+    KINDS: Set('Dash', 'NoDash'),
+    Dashed: function(classAtom, otherClassAtom, classRanges) {
+        return _NonEmptyClassRanges('Dash', classAtom, [otherClassAtom, classRanges]);
+    },
+    NotDashed: function(classAtom, nonEmptyClassRangesNoDash) {
+        return _NonEmptyClassRanges('NoDash', classAtom, nonEmptyClassRangesNoDash);
+    }
+};
+
+/*
+ * NonEmptyClassRanges ::= ClassAtom
+ *                       | ClassAtom NonemptyClassRangesNoDash
+ *                       | ClassAtom - ClassAtom ClassRanges
+ */
+function parseNonEmptyClassRanges(scanner) {
+    var classAtom = parseClassAtom(scanner);
+    if (scanner.tryPop('-')) {
+        return NonEmptyClassRanges.Dashed(classAtom,
+                                          parseClassAtom(scanner),
+                                          parseClassRanges(scanner));
+    }
+    return NonEmptyClassRanges.NotDashed(classAtom, parseNonEmptyClassRangesNoDash(scanner));
+}
+
+function ClassRanges(value) {
+    return {
+        nodeType: 'ClassRanges',
+        value: value,
+        toString: function() {
+            if (!this.value)
+                return 'ClassRanges.EMPTY';
+            return 'ClassRanges(' + this.value + ')';
+        },
+    };
+}
+
+ClassRanges.EMPTY = ClassRanges();
+
+/**
+ * ClassRanges ::= [empty]
+ *               | NonemptyClassRanges
+ */
+function parseClassRanges(scanner) {
+    if (scanner.next === ']')
+        return ClassRanges.EMPTY;
+    return ClassRanges(parseNonEmptyClassRanges(scanner));
+}
+
+function CharacterClass(ranges, inverted) {
+    return {
+        nodeType: 'CharacterClass',
+        ranges: ranges,
+        inverted: inverted,
+        toString: function() {
+            return this.nodeType + '(ranges=' + this.ranges + ', inverted=' + this.inverted + ')';
+        }
+    };
+}
+
+/**
+ * CharacterClass ::= [ [lookahead ∉ {^}] ClassRanges ]
+ *                  | [ ^ ClassRanges ]
+ */
+function parseCharacterClass(scanner) {
+    var inverted = scanner.tryPop('^');
+    // Interesting: [^] is a negation of the empty class range (grammatically permitted).
+    var classRanges = parseClassRanges(scanner);
+    var result = CharacterClass(classRanges, inverted);
+    scanner.popOrSyntaxError(']', 'Missing closing bracket on character class');
+    return result;
+}
+
 function _Atom(kind, value) {
     if (!Atom.KINDS.has(kind))
         throw new Error("Invalid Atom kind: " + kind + "; value: " + value);
+
     return {
         nodeType: 'Atom',
         kind: kind,
@@ -371,19 +566,18 @@ function _Atom(kind, value) {
     };
 }
 
-var Atom = {}; // Put a bag over the weird constructor's head.
-
-Atom.KINDS = Set('PatternCharacter', 'Dot', 'AtomEscape', 'CharacterClass',
-                 'CapturingGroup', 'NonCapturingGroup');
+var Atom = { // Put a bag over the weird constructor's head.
+    // Note, can't put anything in here that calls into |_Atom|.
+    KINDS: Set('PatternCharacter', 'Dot', 'AtomEscape', 'CharacterClass',
+               'CapturingGroup', 'NonCapturingGroup'),
+};
 
 Atom.DOT = _Atom('Dot', null);
+Atom.CapturingGroup = function(dis) { return _Atom('CapturingGroup', dis); };
+Atom.CharacterClass = function(cc) { return _Atom('CharacterClass', cc); }
 
 Atom.PatternCharacter = function() {
     return _Atom('PatternCharacter', PatternCharacter.apply(null, arguments));
-};
-
-Atom.CapturingGroup = function(dis) {
-    return _Atom('CapturingGroup', dis);
 };
 
 Atom.CharacterClassEscape = {
@@ -391,6 +585,9 @@ Atom.CharacterClassEscape = {
 };
 
 function parseAtom(scanner) {
+    if (scanner.tryPop('['))
+        return Atom.CharacterClass(parseCharacterClass(scanner));
+
     if (scanner.tryPop('.'))
         return Atom.DOT;
 
@@ -592,6 +789,21 @@ var TestConstructors = {
         },
         EOL: Alternative(Term.wrapAssertion(Assertion.EOL)),
     },
+    /** Character class alternative. */
+    CCAlt: function(low, high) {
+        return Alternative(Term.wrapAtom(Atom.CharacterClass(
+            CharacterClass(
+                ClassRanges(
+                    NonEmptyClassRanges.Dashed(
+                        ClassAtom.NoDash(ClassAtomNoDash.SourceCharacter(low)),
+                        ClassAtom.NoDash(ClassAtomNoDash.SourceCharacter(high)),
+                        ClassRanges.EMPTY
+                    )
+                ),
+                false
+            )
+        )));
+    },
     CCEAlt: {
         WORD: Alternative(Term.wrapAtom(Atom.CharacterClassEscape.WORD)),
     },
@@ -627,6 +839,7 @@ function makeTestCases() {
             '^abcdef$': PatDis(AssAlt.BOLConcat(PCAlt('abcdef', AssAlt.EOL))),
             /* Builtin character classes. */
             '\\w': PatDis(CCEAlt.WORD),
+            '[a-c]': PatDis(CCAlt('a', 'c')),
             /* Grouping assertions. */
             //'ca(?!t)\\w': PatDis(PCAlt
 
