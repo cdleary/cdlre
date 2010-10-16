@@ -13,7 +13,14 @@ Set.prototype.has = function(item) {
 };
 
 Set.prototype.toString = function() {
-    return Object.keys(this._map).map(function(item) {
+    return 'Set(' + Object.keys(this._map).map(function(item) {
         return uneval(item);
-    }).join(", ");
+    }).join(", ") + ')';
+};
+
+var SetUnion = function(set1, set2) {
+    return {
+        has: function(val) { return set1.has(val) || set2.has(val); },
+        toString: function() { return 'SetUnion(' + set1 + ', ' + set2 + ')' }
+    };
 };

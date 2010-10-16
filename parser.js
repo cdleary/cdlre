@@ -319,6 +319,10 @@ var NonemptyClassRangesNoDash = (function() {
         if (!kinds.has(kind))
             throw new Error("Bad NonemptyClassRangesNoDash kind: " + kind);
 
+        if (classAtom.nodeType !== (kind === 'ClassAtom' ? 'ClassAtom' : 'ClassAtomNoDash'))
+            throw new Error('Bad class atom value for NonemptyClassRangesNoDash: kind: '
+                            + uneval(kind) + '; class atom: ' + classAtom);
+
         return {
             nodeType: 'NonemptyClassRangesNoDash',
             kind: kind,
@@ -634,27 +638,35 @@ function parseClassAtom(scanner) {
 
 /*
  * NonemptyClassRangesNoDash ::= ClassAtom
- *                             | ClassAtomNoDash - ClassAtom ClassRanges
  *                             | ClassAtomNoDash NonemptyClassRangesNoDash
+ *                             | ClassAtomNoDash - ClassAtom ClassRanges
  */
 function parseNonemptyClassRangesNoDash(scanner) {
     parserLog.debug('parsing NonemptyClassRangesNoDash; rest: ' + uneval(scanner.rest));
+
+    /* When lookahead is a dash, we're forced to use the ClassAtom expansion. */
     if (scanner.next === '-') {
         var classAtom = parseClassAtom(scanner);
         parserLog.debug('parsing NonemptyClassRangesNoDash; got ClassAtom; rest: '
                         + uneval(scanner.rest));
         return NonemptyClassRangesNoDash.ClassAtom(classAtom);
     }
+
     var cand = parseClassAtomNoDash(scanner);
+
+    /* When follow is not a valid character, we're forced to use the ClassAtom expansion. */
     if (scanner.next === ']')
-        return NonemptyClassRangesNoDash.ClassAtom(cand);
+        return NonemptyClassRangesNoDash.ClassAtom(ClassAtom.NoDash(cand));
+
     parserLog.debug('parsing NonemptyClassRangesNoDash; got ClassAtomNoDash; rest: '
                     + uneval(scanner.rest));
+
     if (scanner.tryPop('-')) {
         return NonemptyClassRangesNoDash.Dashed(cand,
                                                 parseClassAtom(scanner),
                                                 parseClassRanges(scanner));
     }
+
     return NonemptyClassRangesNoDash.NotDashed(cand,
                                                parseNonemptyClassRangesNoDash(scanner));
 }
@@ -850,15 +862,14 @@ var TestConstructors = {
         )));
     },
     CCAlt: function(chars, inverted) {
-        var necr = NonemptyClassRanges.NotDashed(ClassAtom.NoDash(
-            ClassAtomNoDash.SourceCharacter(chars[0]))
-        );
+        var CASC = function(c) { return ClassAtom.NoDash(ClassAtomNoDash.SourceCharacter(c)); };
+        var necr = NonemptyClassRanges.NotDashed(CASC(chars[0]));
         var iterNECR = necr;
         for (var i = 1; i < chars.length; ++i) {
             /* The last NonemptyClassRangesNoDash has to be a class atom. */
             iterNECR.value = (i === chars.length - 1)
-                ? NonemptyClassRangesNoDash.ClassAtom(ClassAtomNoDash.SourceCharacter(chars[i]))
-                : NonemptyClassRangesNoDash.NotDashed(ClassAtomNoDash.SourceCharacter(chars[i]));
+                ? NonemptyClassRangesNoDash.ClassAtom(CASC(chars[i]))
+                : NonemptyClassRangesNoDash.NotDashed(CASC(chars[i]))
             iterNECR = iterNECR.value;
         }
         return Alternative(Term.wrapAtom(Atom.CharacterClass(
@@ -878,39 +889,45 @@ function makeTestCases() {
             // TODO: grouping assertions.
         };
         // TODO: turn into two-tuples so that regexp literals can be used.
-        return {
-            /* Flat pattern. */
-            'ab': PatDis(PCAlt('ab')),
-            /* Alternation */
-            'a|b': PatDis(
-                PCAlt('a'),
-                Dis(PCAlt('b'))
-            ),
-            /* Quantifiers. */
-            'a*': PatDis(QPCAlt('a', 'Star')),
-            'a+?': PatDis(QPCAlt('a', 'Plus', true)),
-            'a??': PatDis(QPCAlt('a', 'Question', true)),
-            'a+b': PatDis(QPCAlt('a', 'Plus', false, undefined, PCAlt('b'))),
-            'a{3}': PatDis(QPCAlt('a', 'Fixed', false, 3)),
-            'a{1,}': PatDis(QPCAlt('a', 'LowerBound', false, 1)),
-            /* Capturing groups and alternation. */
-            '(a)': PatDis(CGAlt(Dis(PCAlt('a')))),
-            '((b))': PatDis(CGAlt(Dis(CGAlt(Dis(PCAlt('b')))))),
-            '(|abc)': PatDis(CGAlt(Dis(Alt.EMPTY, Dis(PCAlt('abc'))))),
-            /* Simple assertions. */
-            '^abc': PatDis(AssAlt.BOLConcat(PCAlt('abc'))),
-            'def$': PatDis(PCAlt('def', AssAlt.EOL)),
-            '^abcdef$': PatDis(AssAlt.BOLConcat(PCAlt('abcdef', AssAlt.EOL))),
-            /* Builtin character classes. */
-            '\\w': PatDis(CCEAlt.WORD),
-            /* Character classes. */
-            '[a-c]': PatDis(CCRAlt('a', 'c')),
-            '[^a-d]': PatDis(CCRAlt('a', 'd', true)),
-            '[^ab]': PatDis(CCAlt(['a', 'b'], true)),
+        try {
+            return {
+                // Flat pattern
+                'ab': PatDis(PCAlt('ab')),
+                // Alternation
+                'a|b': PatDis(
+                    PCAlt('a'),
+                    Dis(PCAlt('b'))
+                ),
+                // Quantifiers
+                'a*': PatDis(QPCAlt('a', 'Star')),
+                'a+?': PatDis(QPCAlt('a', 'Plus', true)),
+                'a??': PatDis(QPCAlt('a', 'Question', true)),
+                'a+b': PatDis(QPCAlt('a', 'Plus', false, undefined, PCAlt('b'))),
+                'a{3}': PatDis(QPCAlt('a', 'Fixed', false, 3)),
+                'a{1,}': PatDis(QPCAlt('a', 'LowerBound', false, 1)),
+                // Capturing groups and alternation
+                '(a)': PatDis(CGAlt(Dis(PCAlt('a')))),
+                '((b))': PatDis(CGAlt(Dis(CGAlt(Dis(PCAlt('b')))))),
+                '(|abc)': PatDis(CGAlt(Dis(Alt.EMPTY, Dis(PCAlt('abc'))))),
+                // Simple assertions
+                '^abc': PatDis(AssAlt.BOLConcat(PCAlt('abc'))),
+                'def$': PatDis(PCAlt('def', AssAlt.EOL)),
+                '^abcdef$': PatDis(AssAlt.BOLConcat(PCAlt('abcdef', AssAlt.EOL))),
+                // Builtin character classes
+                '\\w': PatDis(CCEAlt.WORD),
+                // Character classes
+                '[a-c]': PatDis(CCRAlt('a', 'c')),
+                '[^a-d]': PatDis(CCRAlt('a', 'd', true)),
+                '[^ab]': PatDis(CCAlt(['a', 'b'], true)),
 
-            '(a*|b)': PatDis(CGAlt(Dis(QPCAlt('a', 'Star'), Dis(PCAlt('b'))))),
-            'f(.)z': PatDis(PCAlt('f', CGAlt(Dis(DOT_ALT), PCAlt('z')))),
-        };
+                '(a*|b)': PatDis(CGAlt(Dis(QPCAlt('a', 'Star'), Dis(PCAlt('b'))))),
+                'f(.)z': PatDis(PCAlt('f', CGAlt(Dis(DOT_ALT), PCAlt('z')))),
+            };
+        } catch (e) {
+            print("CAUGHT: " + e);
+            print(e.stack);
+            throw new Error("Failed to build test cases.");
+        }
     }
 }
 
@@ -987,8 +1004,9 @@ function juxtapose(block1, block2, columnWidth) {
 function pprint(v) { print(pformat(v)); }
 
 function testParser() {
-    print('Making test cases...');
+    print('START MAKING TEST CASES...');
     var cases = makeTestCases();
+    print('DONE MAKING TEST CASES.');
     print('Beginning tests...');
     for (var pattern in cases) {
         var expected = cases[pattern];

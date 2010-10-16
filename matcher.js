@@ -148,6 +148,74 @@ ProcedureBuilder.prototype.evalTerm = function(term) {
             return self.repeatMatcher(m, min, max, greedy, x, c, parenIndex, parenCount);
         };
     }
+    throw new Error("NYI");
+};
+
+ProcedureBuilder.prototype.evalClassEscape = function(ce) {
+    throw new Error("NYI: " + ce);
+};
+
+ProcedureBuilder.prototype.evalClassAtomNoDash = function(cand) {
+    switch (cand.kind) {
+      case 'SourceCharacter': return Set(cand.value);
+      case 'ClassEscape': return this.evalClassEscape(cand.value);
+      default: throw new Error("Unreachable: " + cand.kind);
+    }
+};
+
+ProcedureBuilder.prototype.evalClassAtom = function(ca) {
+    switch (ca.kind) {
+      case 'Dash': return Set('-');
+      case 'NoDash': return this.evalClassAtomNoDash(ca.value);
+      default: throw new Error("Unreachable: " + ca.kind);
+    }
+};
+
+ProcedureBuilder.prototype.evalNonemptyClassRangesNoDash = function(necrnd) {
+    switch (necrnd.kind) {
+      case 'ClassAtom':
+        return this.evalClassAtom(necrnd.classAtom);
+      case 'NotDashed':
+        var A = this.evalClassAtomNoDash(necrnd.classAtom);
+        var B = this.evalNonemptyClassRangesNoDash(necrnd.value);
+        return SetUnion(A, B);
+      case 'Dashed':
+        var A = this.evalClassAtomNoDash(necrnd.classAtom);
+        var B = this.evalClassAtom(necrnd.value[0]);
+        var C = this.evalClassRanges(necrnd.value[1]);
+        var D = this.CharacterRange(A, B);
+        return SetUnion(D, C);
+      default: throw new Error("Unreachable: " + necrnd.kind);
+    }
+
+};
+
+ProcedureBuilder.prototype.evalNonemptyClassRanges = function(necr) {
+    if (necr.kind === 'NoDash' && !necr.value)
+        return this.evalClassAtom(necr.classAtom);
+    var A = this.evalClassAtom(necr.classAtom);
+    if (necr.kind === 'NoDash') {
+        var B = this.evalNonemptyClassRangesNoDash(necr.value);
+        // TODO: factor out this union helper.
+        return SetUnion(A, B);
+    }
+    var otherClassAtom = necr.value[0];
+    var classRanges = necr.value[1];
+    var B = this.evalClassAtom(otherClassAtom);
+    var C = this.evalClassRanges(classRanges);
+    var D = this.CharacterRange(A, B);
+    return SetUnion(D, C);
+};
+
+ProcedureBuilder.prototype.evalClassRanges = function(cr) {
+    if (cr === ClassRanges.EMPTY)
+        return Set();
+    return this.evalNonemptyClassRanges(cr.value);
+};
+
+ProcedureBuilder.prototype.evalCharacterClass = function(cc) {
+    var charSet = this.evalClassRanges(cc.ranges);
+    return {charSet: charSet, inverted: cc.inverted};
 };
 
 ProcedureBuilder.prototype.evalAtom = function(atom) {
@@ -182,10 +250,16 @@ ProcedureBuilder.prototype.evalAtom = function(atom) {
             return m(x, d);
         };
     }
+    if (atom.kind === 'CharacterClass') {
+        var result = this.evalCharacterClass(atom.value);
+        return this.CharacterSetMatcher(result.charSet, result.inverted);
+    }
     throw new Error("NYI: " + atom);
 };
 
 ProcedureBuilder.prototype.CharacterSetMatcher = function(charSet, invert) {
+    if (!charSet)
+        throw new Error("Bad value for charSet: " + charSet);
     var self = this;
     self.clog.debug("creating char set matcher");
     return function matcher(x, c) {
