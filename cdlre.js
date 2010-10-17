@@ -147,7 +147,7 @@ function testCDLRE() {
         [/(a*)baa/, "aabaa"],
         [/q(a|b)*q/, "xxqababqyy"],
         [/(a|d|q|)x/i, "bcaDxqy"],
-        //[/(a(.|[^d])c)*/, "adcaxc"],
+        [/(a(.|[^d])c)*/, "adcaxc"],
         /*
         [/(a*)b\1/, "abaaaxaabaayy"],
         [/(a*)b\1/, "cccdaaabaxaabaayy"],

@@ -4,7 +4,7 @@ var LogLevel = {
     DEBUG: 30,
     INFO: 20,
     WARN: 10,
-    NONE: 0,
+    NONE: -1,
 };
 
 var LOG_LEVEL = LogLevel.NONE;

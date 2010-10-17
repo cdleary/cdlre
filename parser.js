@@ -61,7 +61,7 @@ function Scanner(pattern) {
                 index += 1;
                 return;
             }
-            throw new SyntaxError(msg);
+            throw new SyntaxError(msg + ': ' + uneval(self.rest));
         },
         pop: function() {
             if (index === pattern.length)
@@ -682,7 +682,7 @@ function parseNonemptyClassRanges(scanner) {
     parserLog.debug('parsing NonemptyClassRanges; rest: ' + uneval(scanner.rest));
     var classAtom = parseClassAtom(scanner);
     parserLog.debug('parsing NonemptyClassRanges; got ClassAtom; rest: ' + uneval(scanner.rest));
-    if (scanner.tryPop(']'))
+    if (scanner.next === ']')
         return NonemptyClassRanges.NotDashed(classAtom);
     if (scanner.tryPop('-')) {
         return NonemptyClassRanges.Dashed(classAtom,
@@ -920,6 +920,12 @@ function makeTestCases() {
                 '[^a-d]': PatDis(CCRAlt('a', 'd', true)),
                 '[^ab]': PatDis(CCAlt(['a', 'b'], true)),
 
+                '(a(.|[^d])c)': PatDis(CGAlt(Dis(PCAlt('a',
+                    CGAlt(
+                        Dis(DOT_ALT, Dis(CCAlt(['d'], true))),
+                        PCAlt('c')
+                    )
+                )))),
                 '(a*|b)': PatDis(CGAlt(Dis(QPCAlt('a', 'Star'), Dis(PCAlt('b'))))),
                 'f(.)z': PatDis(PCAlt('f', CGAlt(Dis(DOT_ALT), PCAlt('z')))),
             };
@@ -1010,12 +1016,17 @@ function testParser() {
     print('Beginning tests...');
     for (var pattern in cases) {
         var expected = cases[pattern];
-        var actual = parse(Scanner(pattern));
+        var actual;
         try {
+            actual = parse(Scanner(pattern));
             checkParseEquality(expected, actual);
             print("PASSED: " + uneval(pattern));
         } catch (e) {
             print("... pattern: " + uneval(pattern));
+            if (!actual) {
+                print(e.stack);
+                continue;
+            }
             var colWidth = 50;
             print(juxtapose('Expected', 'Actual', colWidth));
             print(juxtapose('========', '======', colWidth));

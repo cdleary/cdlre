@@ -305,6 +305,6 @@ function CompiledProcedure(ast, multiline, ignoreCase) {
 function testMatcher() {
     var CP = CompiledProcedure;
     with (TestConstructors) {
-        print(CP(PatDis(PCAlt('a')))('blah'));
+        //print(CP(PatDis(PCAlt('a')))('blah'));
     }
 };
