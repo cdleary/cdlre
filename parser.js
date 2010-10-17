@@ -403,6 +403,10 @@ function CharacterClass(ranges, inverted) {
     };
 }
 
+CharacterClass.Empty = function(inverted) {
+    return CharacterClass(ClassRanges.EMPTY, inverted);
+};
+
 var Atom = (function() {
     var kinds = Set('PatternCharacter', 'Dot', 'AtomEscape', 'CharacterClass',
                     'CapturingGroup', 'NonCapturingGroup');
@@ -870,6 +874,8 @@ var TestConstructors = {
     },
     CCAlt: function(chars, inverted) {
         var CASC = function(c) { return ClassAtom.NoDash(ClassAtomNoDash.SourceCharacter(c)); };
+        if (chars.length === 0)
+            return Alternative(Term.wrapAtom(Atom.CharacterClass(CharacterClass.Empty(inverted))));
         var necr = NonemptyClassRanges.NotDashed(CASC(chars[0]));
         var iterNECR = necr;
         for (var i = 1; i < chars.length; ++i) {
@@ -894,6 +900,9 @@ function makeTestCases() {
         var disabled = {
             //'ca(?!t)\\w': PatDis(PCAlt
             // TODO: grouping assertions.
+
+            // TODO: expected syntax error category
+            //')': PatDis(PCAlt(')')),
         };
         // TODO: turn into two-tuples so that regexp literals can be used.
         try {
@@ -926,6 +935,9 @@ function makeTestCases() {
                 '[a-c]': PatDis(CCRAlt('a', 'c')),
                 '[^a-d]': PatDis(CCRAlt('a', 'd', true)),
                 '[^ab]': PatDis(CCAlt(['a', 'b'], true)),
+
+                // Tricky
+                '[^]': PatDis(CCAlt([], true)),
 
                 '(a(.|[^d])c)': PatDis(CGAlt(Dis(PCAlt('a',
                     CGAlt(

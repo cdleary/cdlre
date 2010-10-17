@@ -125,7 +125,14 @@ function testCDLRE() {
             fail();
             return;
         }
-        var hostRE = new RegExp(pattern);
+        try {
+            var hostRE = new RegExp(pattern);
+        } catch (e) {
+            print("CAUGHT: " + e);
+            print("Guest was ok, though; result: " + uneval(guestResult));
+            fail();
+            return;
+        }
         var hostResult = hostRE.exec(input);
         if (!checkMatchResults(hostResult, guestResult))
             fail();
@@ -155,6 +162,8 @@ function testCDLRE() {
         [/a*b/, "aaadaabaaa"],
         [/a*b/, "dddb"],
         [/a*b/, "xxx"],
+        [/[^]/, "foo"],
+        [')', "test(); woo"],
         /*
         // Backreferences.
         [/(a*)b\1/, "abaaaxaabaayy"],
@@ -164,7 +173,7 @@ function testCDLRE() {
     ];
     for (var i = 0; i < tests.length; ++i) {
         var test = tests[i];
-        var pattern = test[0].source;
+        var pattern = typeof test[0] === 'string' ? test[0] : test[0].source;
         var input = test[1];
         check(pattern, input);
     }
