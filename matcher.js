@@ -232,7 +232,7 @@ ProcedureBuilder.prototype.evalAtom = function(atom) {
     }
     if (atom.kind === 'CapturingGroup') {
         var m = self.evalDisjunction(atom.value);
-        var parenIndex = 1; // FIXME: just wrong.
+        var parenIndex = atom.capturingNumber;
         return function matcher(x, c) {
             var d = function(y) {
                 self.rlog.info('executing capture group continuation');

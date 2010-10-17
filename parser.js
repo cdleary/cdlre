@@ -30,6 +30,7 @@ function Scanner(pattern) {
     var index = 0;
     var cc0 = ord('0');
     var cc9 = ord('9');
+    var nCapturingParens = 0;
 
     /** Convert a digit character into its integral form. */
     var toDigit = function(c) {
@@ -41,6 +42,8 @@ function Scanner(pattern) {
     };
 
     var self = {
+        nextCapturingNumber: function() { return ++nCapturingParens; },
+        capturingParenCount: function() { return nCapturingParens; },
         tryPop: function() {
             var indexBefore = index;
             for (var i = 0; i < arguments.length; ++i) {
@@ -181,38 +184,39 @@ QuantifierPrefix.STAR = QuantifierPrefix('Star');
 QuantifierPrefix.QUESTION = QuantifierPrefix('Question');
 QuantifierPrefix.PLUS = QuantifierPrefix('Plus');
 
-function Quantifier(prefix, lazy) {
+var Quantifier = (function() {
+    function Quantifier(prefix, lazy) {
+        return {
+            nodeType: 'Quantifier',
+            prefix: prefix,
+            lazy: !!lazy,
+            toString: function() {
+                return this.nodeType + "(prefix=" + this.prefix + ", lazy=" + this.lazy + ")";
+            }
+        };
+    }
+
     return {
-        nodeType: 'Quantifier',
-        prefix: prefix,
-        lazy: !!lazy,
-        toString: function() {
-            return this.nodeType + "(prefix=" + this.prefix + ", lazy=" + this.lazy + ")";
+        Star: function(lazy) { return Quantifier(QuantifierPrefix.STAR, lazy); },
+        Plus: function(lazy) { return Quantifier(QuantifierPrefix.PLUS, lazy); },
+        Question: function(lazy) { return Quantifier(QuantifierPrefix.QUESTION, lazy); },
+        Fixed: function(lazy, value) {
+            if (typeof value !== 'number')
+                throw new Error("Bad fixed value: " + value);
+            return Quantifier(QuantifierPrefix('Fixed', value), lazy);
+        },
+        Range: function(lazy, value) {
+            if (value.length !== 2)
+                throw new Error("Bad range value: " + value);
+            return Quantifier(QuantifierPrefix('Range', value), lazy);
+        },
+        LowerBound: function(lazy, value) {
+            if (typeof value !== 'number')
+                throw new Error("Bad lower bound value: " + value);
+            return Quantifier(QuantifierPrefix('LowerBound', value), lazy);
         }
     };
-}
-
-Quantifier.Star = function(lazy) { return Quantifier(QuantifierPrefix.STAR, lazy); };
-Quantifier.Plus = function(lazy) { return Quantifier(QuantifierPrefix.PLUS, lazy); };
-Quantifier.Question = function(lazy) { return Quantifier(QuantifierPrefix.QUESTION, lazy); };
-
-Quantifier.Fixed = function(lazy, value) {
-    if (typeof value !== 'number')
-        throw new Error("Bad fixed value: " + value);
-    return Quantifier(QuantifierPrefix('Fixed', value), lazy);
-};
-
-Quantifier.Range = function(lazy, value) {
-    if (value.length !== 2)
-        throw new Error("Bad range value: " + value);
-    return Quantifier(QuantifierPrefix('Range', value), lazy);
-};
-
-Quantifier.LowerBound = function(lazy, value) {
-    if (typeof value !== 'number')
-        throw new Error("Bad lower bound value: " + value);
-    return Quantifier(QuantifierPrefix('LowerBound', value), lazy);
-};
+})();
 
 function CharacterClassEscape(kind) {
     if (!CharacterClassEscape.KINDS.has(kind))
@@ -730,10 +734,13 @@ function parseAtom(scanner) {
 
     if (scanner.tryPop('(')) {
         var result;
-        if (scanner.tryPop('?', ':'))
+        if (scanner.tryPop('?', ':')) {
             result = Atom.NonCapturingGroup(parseDisjunction(scanner));
-        else
+        } else {
+            var number = scanner.nextCapturingNumber();
             result = Atom.CapturingGroup(parseDisjunction(scanner));
+            result.capturingNumber = number;
+        }
         if (!result)
             throw new SyntaxError("Capturing group required");
         scanner.popOrSyntaxError(')', 'Missing closing parenthesis on group');
