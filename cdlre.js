@@ -131,6 +131,8 @@ function testCDLRE() {
             fail();
     }
     var disabledTests = [
+        /* Needs character class escape implementation in the matcher. */
+        [/x\d\dy/, "abcx45ysss235"],
     ];
     var tests = [
         [/..h/, 'blah'],
@@ -148,16 +150,16 @@ function testCDLRE() {
         [/q(a|b)*q/, "xxqababqyy"],
         [/(a|d|q|)x/i, "bcaDxqy"],
         [/(a(.|[^d])c)*/, "adcaxc"],
-        /*
-        [/(a*)b\1/, "abaaaxaabaayy"],
-        [/(a*)b\1/, "cccdaaabaxaabaayy"],
-        [/(a*)b\1/, "cccdaaabqxaabaayy"],
         [/(a|(e|q))(x|y)/, "bcaddxqy"],
         [/a+b+d/, "aabbeeaabbs"],
         [/a*b/, "aaadaabaaa"],
         [/a*b/, "dddb"],
         [/a*b/, "xxx"],
-        [/x\d\dy/, "abcx45ysss235"],
+        /*
+        // Backreferences.
+        [/(a*)b\1/, "abaaaxaabaayy"],
+        [/(a*)b\1/, "cccdaaabaxaabaayy"],
+        [/(a*)b\1/, "cccdaaabqxaabaayy"],
         */
     ];
     for (var i = 0; i < tests.length; ++i) {

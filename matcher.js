@@ -302,9 +302,8 @@ function CompiledProcedure(ast, multiline, ignoreCase) {
     };
 }
 
-function testMatcher() {
-    var CP = CompiledProcedure;
-    with (TestConstructors) {
-        //print(CP(PatDis(PCAlt('a')))('blah'));
-    }
-};
+/* 
+ * TODO: could create a set of match tests with pre-cooked parse trees, but the 
+ * integration tests seem to be doing just fine for now, since the parse results
+ * are well unit-tested.
+ */
