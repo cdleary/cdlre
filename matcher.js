@@ -264,7 +264,7 @@ ProcedureBuilder.prototype.CharacterSetMatcher = function(charSet, invert) {
     self.clog.debug("creating char set matcher");
     return function matcher(x, c) {
         var e = x.endIndex;
-        // Note: clog because char set matchers are all executed at compile time.
+        // Note: use clog because char set matchers are all executed at compile time.
         self.clog.debug("char matcher at end index: " + e);
         if (e === self.inputLength)
             return MatchResult.FAILURE;
@@ -275,8 +275,15 @@ ProcedureBuilder.prototype.CharacterSetMatcher = function(charSet, invert) {
         var ch = self.input[e];
         var chc = self.canonicalize(ch);
         self.clog.debug("canonicalized input char: " + uneval(chc));
-        self.clog.debug("char set: " + charSet);
-        if (charSet.has(chc) === invert)
+        self.clog.debug("(to be canonicalized) char set: " + charSet);
+        var charSetHasChar = false;
+        charSet.each(function(a) {
+            if (self.canonicalize(a) === chc) {
+                charSetHasChar = true;
+                return true;
+            }
+        });
+        if (charSetHasChar === invert)
             return MatchResult.FAILURE;
         var cap = x.captures;
         var y = State(e + 1, cap);
@@ -287,7 +294,13 @@ ProcedureBuilder.prototype.CharacterSetMatcher = function(charSet, invert) {
 ProcedureBuilder.prototype.canonicalize = function(ch) {
     if (!this.ignoreCase)
         return ch;
-    throw new Error("NYI");
+    var u = ch.toUpperCase();
+    if (u.length !== 1) // TODO: is this the correct check?
+        return u;
+    var cu = u[0];
+    return (ch.charCodeAt(0) >= 128 && cu.charCodeAt(0) < 128)
+        ? ch
+        : cu;
 };
 
 /**

@@ -1,12 +1,37 @@
 function GuestBuiltins() {
     var LOG = new Logger("RegExp");
 
+    var ToString = function(o) { return new String(o).toString(); }
+
+    var countFlags = function(flags) {
+        var flagToCount = {};
+        for (var i = 0; i < flags.length; ++i) {
+            var flag = flags[i];
+            if (flag in flagToCount)
+                flagToCount[flag] += 1;
+            else
+                flagToCount[flag] = 1;
+        }
+        return flagToCount;
+    }
+
     function RegExp(pattern, flags) {
-        if (flags !== undefined)
+        if (pattern.__proto__ == RegExp.prototype)
             throw new Error("NYI");
-        this.pattern = pattern;
-        var ast = makeAST(pattern);
-        this.__match = CompiledProcedure(ast, false, false);
+        var P = pattern === undefined ? '' : ToString(pattern);
+        var F = flags === undefined ? '' : ToString(flags);
+        var ast = makeAST(P); // throws SyntaxError, per spec.
+        /* 
+         * If F contains an unknown character or the same character
+         * more than once, throw a syntax error.
+         */
+        var flagToCount = countFlags(F);
+        //this.source = S; TODO
+        this.global = flagToCount['g'] === 1;
+        this.ignoreCase = flagToCount['i'] === 1;
+        this.multiline = flagToCount['m'] === 1;
+        this.__match = CompiledProcedure(ast, this.multiline, this.ignoreCase);
+        this.lastIndex = 0;
     }
     
     /**
@@ -111,13 +136,14 @@ function checkMatchResults(host, guest) {
 function testCDLRE() {
     var guestBuiltins = GuestBuiltins();
     var failCount = 0;
-    function check(pattern, input) {
+    function check(pattern, input, flags) {
         function fail() {
-            print("FAIL:     pattern: " + uneval(pattern) + "; input: " + uneval(input));
+            print("FAIL:     pattern: " + uneval(pattern) + "; input: " + uneval(input)
+                  + "; flags: " + flags);
             failCount += 1;
         }
         try {
-            var guestRE = new guestBuiltins.RegExp(pattern);
+            var guestRE = new guestBuiltins.RegExp(pattern, flags);
             var guestResult = guestRE.exec(input);
         } catch (e) {
             print("CAUGHT: " + e);
@@ -126,7 +152,7 @@ function testCDLRE() {
             return;
         }
         try {
-            var hostRE = new RegExp(pattern);
+            var hostRE = new RegExp(pattern, flags);
         } catch (e) {
             print("CAUGHT: " + e);
             print("Guest was ok, though; result: " + uneval(guestResult));
@@ -139,31 +165,30 @@ function testCDLRE() {
     }
     var disabledTests = [
         /* Needs character class escape implementation in the matcher. */
+        //[')', "test(); woo"],
         [/x\d\dy/, "abcx45ysss235"],
+        [/[^abc]def[abc]+/, "abxdefbb"],
+        //[/(a(.|[^d])c)*/, "adcaxc"],
     ];
     var tests = [
-        [/..h/, 'blah'],
-        [/foo(.)baz/, 'foozbaz'],
-        [/a/, 'blah'],
-        [/la/, 'blah'],
-        [/a*h/, 'blah'],
-        [/m(o{2,})cow/, 'mooooocow'],
-        [/x86_64/, "x86_64-gcc3"],
-        [/x86_64/, "x86_64-gcc3"],
-        [/x86_64/, "x86_64-gcc3"],
-        [/[^abc]def[abc]+/, "abxdefbb"],
-        [/(a*)baa/, "ccdaaabaxaabaa"],
-        [/(a*)baa/, "aabaa"],
-        [/q(a|b)*q/, "xxqababqyy"],
         [/(a|d|q|)x/i, "bcaDxqy"],
-        [/(a(.|[^d])c)*/, "adcaxc"],
-        [/(a|(e|q))(x|y)/, "bcaddxqy"],
-        [/a+b+d/, "aabbeeaabbs"],
+        [/x86_64/, "x86_64-gcc3"],
         [/a*b/, "aaadaabaaa"],
         [/a*b/, "dddb"],
         [/a*b/, "xxx"],
         [/[^]/, "foo"],
-        [')', "test(); woo"],
+        [/(a*)baa/, "ccdaaabaxaabaa"],
+        [/(a*)baa/, "aabaa"],
+        [/q(a|b)*q/, "xxqababqyy"],
+        [/a+b+d/, "aabbeeaabbs"],
+        [/(a+)(b+)?/g, "aaaccc"],
+        [/(a|(e|q))(x|y)/, "bcaddxqy"],
+        [/m(o{2,})cow/, 'mooooocow'],
+        //[/foo(.)baz/, 'foozbaz'], FIXME: need canonicalize match method for charSet.
+        //[/..h/, 'blah'],
+        [/a/, 'blah'],
+        [/la/, 'blah'],
+        [/a*h/, 'blah'],
         /*
         // Backreferences.
         [/(a*)b\1/, "abaaaxaabaayy"],
@@ -171,11 +196,25 @@ function testCDLRE() {
         [/(a*)b\1/, "cccdaaabqxaabaayy"],
         */
     ];
+    var extractFlags = function(re) {
+        var flags = [(re.ignoreCase ? 'i' : ''),
+                     (re.multiline ? 'm' : ''),
+                     (re.sticky ? 'y' : ''),
+                     (re.global ? 'g' : '')].join('');
+        return flags.length === 0 ? undefined : flags;
+    }
     for (var i = 0; i < tests.length; ++i) {
         var test = tests[i];
-        var pattern = typeof test[0] === 'string' ? test[0] : test[0].source;
+        var pattern, flags;
+        if (typeof test[0] === 'string') {
+            pattern = test[0];
+            flags = '';
+        } else {
+            pattern = test[0].source;
+            flags = extractFlags(test[0]);
+        }
         var input = test[1];
-        check(pattern, input);
+        check(pattern, input, flags);
     }
     if (failCount)
         print("FAILED " + failCount + "/" + tests.length);

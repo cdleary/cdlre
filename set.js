@@ -12,6 +12,16 @@ Set.prototype.has = function(item) {
     return item in this._map;
 };
 
+Set.prototype.each = function(callback) {
+    for (var key in this._map) {
+        if (!this._map.hasOwnProperty(key))
+            continue;
+        var result = callback(key);
+        if (result) // Truthy value indicates early return, like "break".
+            return;
+    }
+};
+
 Set.prototype.toString = function() {
     return 'Set(' + Object.keys(this._map).map(function(item) {
         return uneval(item);
