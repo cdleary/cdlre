@@ -29,6 +29,31 @@ function ProcedureBuilder(ast, multiline, ignoreCase, input, index) {
     this.rlog = new Logger('ProcedureBuilder@RunTime');
 }
 
+ProcedureBuilder.prototype.CharSet = function() {
+    var self = this;
+    var set = new Set(arguments);
+    set.hasCanonicalized = function(tcc) {
+        var found = false;
+        set.each(function(c) {
+            cc = self.canonicalize(c);
+            if (cc === tcc) {
+                found = true;
+                return true;
+            }
+        });
+        return found;
+    };
+    return set;
+};
+
+ProcedureBuilder.prototype.CharSetUnion = function(cs1, cs2) {
+    var su = SetUnion(cs1, cs2);
+    su.hasCanonicalized = function(tcc) {
+        return cs1.hasCanonicalized(tcc) || cs2.hasCanonicalized(tcc);
+    };
+    return su;
+};
+
 ProcedureBuilder.prototype.evalPattern = function() {
     this.clog.debug("evaluating pattern");
     var m = this.evalDisjunction(this.ast.disjunction);
@@ -157,7 +182,7 @@ ProcedureBuilder.prototype.evalClassEscape = function(ce) {
 
 ProcedureBuilder.prototype.evalClassAtomNoDash = function(cand) {
     switch (cand.kind) {
-      case 'SourceCharacter': return Set(cand.value);
+      case 'SourceCharacter': return this.CharSet(cand.value);
       case 'ClassEscape': return this.evalClassEscape(cand.value);
       default: throw new Error("Unreachable: " + cand.kind);
     }
@@ -165,7 +190,7 @@ ProcedureBuilder.prototype.evalClassAtomNoDash = function(cand) {
 
 ProcedureBuilder.prototype.evalClassAtom = function(ca) {
     switch (ca.kind) {
-      case 'Dash': return Set('-');
+      case 'Dash': return this.CharSet('-');
       case 'NoDash': return this.evalClassAtomNoDash(ca.value);
       default: throw new Error("Unreachable: " + ca.kind);
     }
@@ -178,13 +203,13 @@ ProcedureBuilder.prototype.evalNonemptyClassRangesNoDash = function(necrnd) {
       case 'NotDashed':
         var A = this.evalClassAtomNoDash(necrnd.classAtom);
         var B = this.evalNonemptyClassRangesNoDash(necrnd.value);
-        return SetUnion(A, B);
+        return this.CharSetUnion(A, B);
       case 'Dashed':
         var A = this.evalClassAtomNoDash(necrnd.classAtom);
         var B = this.evalClassAtom(necrnd.value[0]);
         var C = this.evalClassRanges(necrnd.value[1]);
         var D = this.CharacterRange(A, B);
-        return SetUnion(D, C);
+        return this.CharSetUnion(D, C);
       default: throw new Error("Unreachable: " + necrnd.kind);
     }
 
@@ -197,19 +222,19 @@ ProcedureBuilder.prototype.evalNonemptyClassRanges = function(necr) {
     if (necr.kind === 'NoDash') {
         var B = this.evalNonemptyClassRangesNoDash(necr.value);
         // TODO: factor out this union helper.
-        return SetUnion(A, B);
+        return this.CharSetUnion(A, B);
     }
     var otherClassAtom = necr.value[0];
     var classRanges = necr.value[1];
     var B = this.evalClassAtom(otherClassAtom);
     var C = this.evalClassRanges(classRanges);
     var D = this.CharacterRange(A, B);
-    return SetUnion(D, C);
+    return this.CharSetUnion(D, C);
 };
 
 ProcedureBuilder.prototype.evalClassRanges = function(cr) {
     if (cr === ClassRanges.EMPTY)
-        return Set();
+        return this.CharSet();
     return this.evalNonemptyClassRanges(cr.value);
 };
 
@@ -223,11 +248,14 @@ ProcedureBuilder.prototype.evalAtom = function(atom) {
     self.clog.debug("evaluating atom");
     if (atom.kind === 'PatternCharacter') {
         var ch = atom.value.sourceCharacter;
-        return self.CharacterSetMatcher(Set(ch), false);
+        return self.CharacterSetMatcher(this.CharSet(ch), false);
     }
     if (atom.kind === 'Dot') {
         return self.CharacterSetMatcher({
             has: function(ch) { return ch !== '\n'; },
+            hasCanonicalized: function(cch) {
+                return cch !== self.canonicalize('\n');
+            }
         }, false);
     }
     if (atom.kind === 'CapturingGroup') {
@@ -276,14 +304,7 @@ ProcedureBuilder.prototype.CharacterSetMatcher = function(charSet, invert) {
         var chc = self.canonicalize(ch);
         self.clog.debug("canonicalized input char: " + uneval(chc));
         self.clog.debug("(to be canonicalized) char set: " + charSet);
-        var charSetHasChar = false;
-        charSet.each(function(a) {
-            if (self.canonicalize(a) === chc) {
-                charSetHasChar = true;
-                return true;
-            }
-        });
-        if (charSetHasChar === invert)
+        if (charSet.hasCanonicalized(chc) === invert)
             return MatchResult.FAILURE;
         var cap = x.captures;
         var y = State(e + 1, cap);

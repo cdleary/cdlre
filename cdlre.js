@@ -139,7 +139,7 @@ function testCDLRE() {
     function check(pattern, input, flags) {
         function fail() {
             print("FAIL:     pattern: " + uneval(pattern) + "; input: " + uneval(input)
-                  + "; flags: " + flags);
+                  + "; flags: " + uneval(flags));
             failCount += 1;
         }
         try {
@@ -164,11 +164,10 @@ function testCDLRE() {
             fail();
     }
     var disabledTests = [
-        /* Needs character class escape implementation in the matcher. */
-        //[')', "test(); woo"],
-        [/x\d\dy/, "abcx45ysss235"],
-        [/[^abc]def[abc]+/, "abxdefbb"],
-        //[/(a(.|[^d])c)*/, "adcaxc"],
+        // Backreferences.
+        [/(a*)b\1/, "abaaaxaabaayy"],
+        [/(a*)b\1/, "cccdaaabaxaabaayy"],
+        [/(a*)b\1/, "cccdaaabqxaabaayy"],
     ];
     var tests = [
         [/(a|d|q|)x/i, "bcaDxqy"],
@@ -184,17 +183,15 @@ function testCDLRE() {
         [/(a+)(b+)?/g, "aaaccc"],
         [/(a|(e|q))(x|y)/, "bcaddxqy"],
         [/m(o{2,})cow/, 'mooooocow'],
-        //[/foo(.)baz/, 'foozbaz'], FIXME: need canonicalize match method for charSet.
-        //[/..h/, 'blah'],
+        [/foo(.)baz/, 'foozbaz'],
+        [/..h/, 'blah'],
         [/a/, 'blah'],
         [/la/, 'blah'],
         [/a*h/, 'blah'],
-        /*
-        // Backreferences.
-        [/(a*)b\1/, "abaaaxaabaayy"],
-        [/(a*)b\1/, "cccdaaabaxaabaayy"],
-        [/(a*)b\1/, "cccdaaabqxaabaayy"],
-        */
+        [/(a(.|[^d])c)*/, "adcaxc"],
+        //[')', "test(); woo"], FIXME should be syntax error
+        //[/x\d\dy/, "abcx45ysss235"], FIXME digit atom escape
+        [/[^abc]def[abc]+/, "abxdefbb"],
     ];
     var extractFlags = function(re) {
         var flags = [(re.ignoreCase ? 'i' : ''),
