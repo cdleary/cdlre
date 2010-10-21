@@ -176,30 +176,30 @@ function PatternCharacter(sourceCharacter) {
 PatternCharacter.BAD = Set('^', '$', '.', '*', '+', '?', '(', ')', '[', ']', '{', '}',
                            '|', BACKSLASH);
 
-function QuantifierPrefix(kind, value) {
-    if (!QuantifierPrefix.KINDS.has(kind))
-        throw new Error("Invalid quantifier prefix kind: " + kind + "; value: " + value);
-
-    return {
-        nodeType: 'QuantifierPrefix',
-        kind: kind,
-        value: value,
-        toString: function() {
-            var result = this.nodeType + "(kind=" + uneval(this.kind);
-            if (this.value)
-                result += ", value=" + this.value
-            result += ")";
-            return result;
-        }
-    };
-}
-
-QuantifierPrefix.KINDS = Set('Star', 'Plus', 'Question', 'Fixed', 'LowerBound', 'Range');
-QuantifierPrefix.STAR = QuantifierPrefix('Star');
-QuantifierPrefix.QUESTION = QuantifierPrefix('Question');
-QuantifierPrefix.PLUS = QuantifierPrefix('Plus');
-
 var Quantifier = (function() {
+    function QuantifierPrefix(kind, value) {
+        var kinds = Set('Star', 'Plus', 'Question', 'Fixed', 'LowerBound', 'Range');
+        if (!kinds.has(kind))
+            throw new Error("Invalid quantifier prefix kind: " + kind + "; value: " + value);
+
+        return {
+            nodeType: 'QuantifierPrefix',
+            kind: kind,
+            value: value,
+            toString: function() {
+                var result = this.nodeType + "(kind=" + uneval(this.kind);
+                if (this.value)
+                    result += ", value=" + this.value
+                result += ")";
+                return result;
+            }
+        };
+    }
+
+    QuantifierPrefix.STAR = QuantifierPrefix('Star');
+    QuantifierPrefix.QUESTION = QuantifierPrefix('Question');
+    QuantifierPrefix.PLUS = QuantifierPrefix('Plus');
+
     function Quantifier(prefix, lazy) {
         return {
             nodeType: 'Quantifier',
@@ -233,24 +233,23 @@ var Quantifier = (function() {
     };
 })();
 
-function CharacterClassEscape(kind) {
-    if (!CharacterClassEscape.KINDS.has(kind))
-        throw new Error("Bad character class escape kind: " + kind);
-
-    return {
-        nodeType: 'CharacterClassEscape',
-        kind: kind,
-        toString: function() {
-            return this.nodeType + '(kind=' + uneval(this.kind) + ')';
-        },
-    };
-}
-
-CharacterClassEscape.KINDS = Set('Word', 'NotWord', 'Digit', 'NotDigit',
-                                 'Space', 'NotSpace');
-CharacterClassEscape.WORD = CharacterClassEscape('Word');
-
 var AtomEscape = (function() {
+    function CharacterClassEscape(kind) {
+        var kinds = Set('Word', 'NotWord', 'Digit', 'NotDigit', 'Space', 'NotSpace');
+        if (!kinds.has(kind))
+            throw new Error("Bad character class escape kind: " + kind);
+
+        return {
+            nodeType: 'CharacterClassEscape',
+            kind: kind,
+            toString: function() {
+                return this.nodeType + '(kind=' + uneval(this.kind) + ')';
+            },
+        };
+    }
+
+    CharacterClassEscape.WORD = CharacterClassEscape('Word');
+
     function AtomEscape(decimalEscape, characterEscape, characterClassEscape) {
         return {
             nodeType: "AtomEscape",

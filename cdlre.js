@@ -1,3 +1,9 @@
+/**
+ * Facade for regular expression parsing and matching in a form that
+ * approximates the builtin |RegExp| class, as it is prophesized in the
+ * ECMAScripture.
+ */
+
 function GuestBuiltins() {
     var LOG = new Logger("RegExp");
 
