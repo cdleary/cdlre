@@ -111,6 +111,13 @@ function Scanner(pattern) {
         SyntaxError: function(msg) {
             return new SyntaxError(msg + "; rest: " + uneval(self.rest));
         },
+        assert: function(cond, msg) {
+            if (cond)
+                return;
+            if (msg)
+                log.error(msg);
+            throw new Error("Assertion failure" + (msg ? ": " + msg : ''));
+        },
     };
 
     Object.defineProperty(self, 'next', {get: function() { return pattern[index]; }});
@@ -533,6 +540,17 @@ function Pattern(disjunction) {
  * Parsing routines *
  ********************/
 
+/*
+ * Note that some of the recursive descent parsing routines are "fallible",
+ * meaning that they return |undefined| if they do not see a lookahead
+ * character that would trigger their production. This is stylistic:
+ * in some cases, it's just nicer than the alternative approach.
+ *
+ * The alternative approach is to define the valid lookahead set for each production
+ * external to the production body itself and having the parent production
+ * check before invoking.
+ */
+
 /**
  * Assertion ::= "^"
  *             | "$"
@@ -540,6 +558,7 @@ function Pattern(disjunction) {
  *             | "\" "B"
  *             | "(" "?" "=" Disjunction ")"
  *             | "(" "?" "!" Disjunction ")"
+ * Fallible.
  */
 function parseAssertion(scanner) {
     if (scanner.tryPop('^'))
@@ -569,6 +588,7 @@ function parseAssertion(scanner) {
 /**
  * Quantifier ::= QuantifierPrefix
  *              | QuantifierPrefix "?"
+ * Fallible.
  */
 function parseQuantifier(scanner) {
     var result;
@@ -803,8 +823,7 @@ function parseTerm(scanner) {
     if (assertion)
         return Term.wrapAssertion(assertion);
     var atom = parseAtom(scanner);
-    if (!atom)
-        return;
+    scanner.assert(atom);
     var quantifier = parseQuantifier(scanner);
     return Term.wrapAtom(atom, quantifier);
 }
@@ -823,12 +842,20 @@ function parseAlternative(scanner) {
     }
     parserLog.debug('Alternative :: Term Alternative');
     var term = parseTerm(scanner);
-    if (!term)
-        return;
+    scanner.assert(term);
     var alternative = parseAlternative(scanner) || Alternative.EMPTY;
     return Alternative(term, alternative);
 }
 
+/**
+ * Because the Alternative production can resolve to the empty string,
+ * we detect whether the lookahead character is a member of
+ * FIRST(Alternative) eagerly.
+ *
+ * This set represents the inverse of FIRST(Alternative), which tells us
+ * whether Alternative should resolve to the empty production expansion.
+ * This set is derived from the FIRST sets of sub-productions of Alternative.
+ */
 parseAlternative.BAD_START = SetDifference(
     PatternCharacter.BAD,
     Set('.', BACKSLASH, '(', '[', '^', '$')
