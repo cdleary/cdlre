@@ -48,21 +48,23 @@ function Scanner(pattern) {
         nextCapturingNumber: function() { return ++nCapturingParens; },
         capturingParenCount: function() { return nCapturingParens; },
         tryPop: function() {
-            var argsArr = [];
-            var indexBefore = index;
+            if (this.hasLookAhead.apply(this, arguments)) {
+                index += arguments.length;
+                return true;
+            }
+            return false;
+        },
+        hasLookAhead: function() {
             for (var i = 0; i < arguments.length; ++i) {
                 var targetChar = arguments[i];
                 if (targetChar.length !== 1)
                     throw new Error('Bad target character value: ' + targetChar);
-                var c = pattern[index + i];
-                if (c !== targetChar) {
-                    index = indexBefore;
+                if (pattern[index + i] !== targetChar) {
+                    log.debug("Failed lookahead; length: " + arguments.length
+                              + "; target char: " + uneval(targetChar));
                     return false;
                 }
-                argsArr.push(uneval(targetChar));
             }
-            log.debug("pop: " + argsArr.join(', '));
-            index += arguments.length;
             return true;
         },
         popOrSyntaxError: function(c, msg) {
@@ -448,6 +450,7 @@ var Atom = (function() {
     return {
         DOT: Atom('Dot', null),
         CapturingGroup: function(dis) { return Atom('CapturingGroup', dis); },
+        NonCapturingGroup: function(dis) { return Atom('NonCapturingGroup', dis); },
         CharacterClass: function(cc) { return Atom('CharacterClass', cc); },
         PatternCharacter: function() {
             return Atom('PatternCharacter', PatternCharacter.apply(null, arguments));
@@ -583,20 +586,19 @@ function parseAssertion(scanner) {
     }
 
     /* Assertion groups. */
-    if (!scanner.tryPop('(', '?'))
-        return;
-
-    if (Set('=', '!').has(scanner.next)) {
-        var constructor = scanner.next === '!'
-                          ? Assertion.ZeroWidthNegative
-                          : Assertion.ZeroWidthPositive;
-        scanner.pop();
+    if (scanner.tryPop('(', '?', '=')) {
         var dis = parseDisjunction(scanner);
         scanner.assert(dis);
         scanner.popOrSyntaxError(')', 'Expected closing paren at end of assertion group');
-        return constructor(dis);
+        return Assertion.ZeroWidthPositive(dis);
     }
-    throw scanner.SyntaxError('Invalid assertion start');
+
+    if (scanner.tryPop('(', '?', '!')) {
+        var dis = parseDisjunction(scanner);
+        scanner.assert(dis);
+        scanner.popOrSyntaxError(')', 'Expected closing paren at end of assertion group');
+        return Assertion.ZeroWidthNegative(dis);
+    }
 }
 
 /**
@@ -633,8 +635,8 @@ function parseQuantifier(scanner) {
 
         var secondDigits = scanner.popDecimalDigits();
         scanner.assert(secondDigits !== undefined);
-        var result = Quantifier.Range(scanner.tryPop('?'), [firstDigits, secondDigits]);
         scanner.popOrSyntaxError('}', 'Missing closing brace on ranged quantifier');
+        var result = Quantifier.Range(scanner.tryPop('?'), [firstDigits, secondDigits]);
         return result;
 
       default:
@@ -982,6 +984,9 @@ var TestConstructors = {
             )
         )));
     },
+    NCGAlt: function(dis, nextAlt) {
+        return Alternative(Term.wrapAtom(Atom.NonCapturingGroup(dis)), nextAlt);
+    },
     CCAlt: function(chars, inverted) {
         var CASC = function(c) { return ClassAtom.NoDash(ClassAtomNoDash.SourceCharacter(c)); };
         if (chars.length === 0)
@@ -1030,6 +1035,7 @@ function makeTestCases() {
                 [/^abcdef$/, PatDis(AssAlt.BOLConcat(PCAlt('abcdef', AssAlt.EOL)))],
                 // Grouping assertions
                 [/ca(?!t)/, PatDis(PCAlt('ca', AssAlt.Zwn(Dis(PCAlt('t')))))],
+                [/ca(?:t)s/, PatDis(PCAlt('ca', NCGAlt(Dis(PCAlt('t')), PCAlt('s'))))],
                 // Builtin character classes
                 [/\w/, PatDis(CCEAlt.WORD)],
                 // Character classes
