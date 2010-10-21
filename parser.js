@@ -902,52 +902,48 @@ function makeTestCases() {
             // TODO: grouping assertions.
 
             // TODO: expected syntax error category
-            //')': PatDis(PCAlt(')')),
         };
         // TODO: turn into two-tuples so that regexp literals can be used.
         try {
-            return {
+            return [
                 // Flat pattern
-                'ab': PatDis(PCAlt('ab')),
+                [/ab/, PatDis(PCAlt('ab'))],
                 // Alternation
-                'a|b': PatDis(
-                    PCAlt('a'),
-                    Dis(PCAlt('b'))
-                ),
+                [/a|b/, PatDis(PCAlt('a'), Dis(PCAlt('b')))],
                 // Quantifiers
-                'a*': PatDis(QPCAlt('a', 'Star')),
-                'a+?': PatDis(QPCAlt('a', 'Plus', true)),
-                'a??': PatDis(QPCAlt('a', 'Question', true)),
-                'a+b': PatDis(QPCAlt('a', 'Plus', false, undefined, PCAlt('b'))),
-                'a{3}': PatDis(QPCAlt('a', 'Fixed', false, 3)),
-                'a{1,}': PatDis(QPCAlt('a', 'LowerBound', false, 1)),
+                [/a*/, PatDis(QPCAlt('a', 'Star'))],
+                [/a+?/, PatDis(QPCAlt('a', 'Plus', true))],
+                [/a??/, PatDis(QPCAlt('a', 'Question', true))],
+                [/a+b/, PatDis(QPCAlt('a', 'Plus', false, undefined, PCAlt('b')))],
+                [/a{3}/, PatDis(QPCAlt('a', 'Fixed', false, 3))],
+                [/a{1,}/, PatDis(QPCAlt('a', 'LowerBound', false, 1))],
                 // Capturing groups and alternation
-                '(a)': PatDis(CGAlt(Dis(PCAlt('a')))),
-                '((b))': PatDis(CGAlt(Dis(CGAlt(Dis(PCAlt('b')))))),
-                '(|abc)': PatDis(CGAlt(Dis(Alt.EMPTY, Dis(PCAlt('abc'))))),
+                [/(a)/, PatDis(CGAlt(Dis(PCAlt('a'))))],
+                [/((b))/, PatDis(CGAlt(Dis(CGAlt(Dis(PCAlt('b'))))))],
+                [/(|abc)/, PatDis(CGAlt(Dis(Alt.EMPTY, Dis(PCAlt('abc')))))],
                 // Simple assertions
-                '^abc': PatDis(AssAlt.BOLConcat(PCAlt('abc'))),
-                'def$': PatDis(PCAlt('def', AssAlt.EOL)),
-                '^abcdef$': PatDis(AssAlt.BOLConcat(PCAlt('abcdef', AssAlt.EOL))),
+                [/^abc/, PatDis(AssAlt.BOLConcat(PCAlt('abc')))],
+                [/def$/, PatDis(PCAlt('def', AssAlt.EOL))],
+                [/^abcdef$/, PatDis(AssAlt.BOLConcat(PCAlt('abcdef', AssAlt.EOL)))],
                 // Builtin character classes
-                '\\w': PatDis(CCEAlt.WORD),
+                [/\w/, PatDis(CCEAlt.WORD)],
                 // Character classes
-                '[a-c]': PatDis(CCRAlt('a', 'c')),
-                '[^a-d]': PatDis(CCRAlt('a', 'd', true)),
-                '[^ab]': PatDis(CCAlt(['a', 'b'], true)),
+                [/[a-c]/, PatDis(CCRAlt('a', 'c'))],
+                [/[^a-d]/, PatDis(CCRAlt('a', 'd', true))],
+                [/[^ab]/, PatDis(CCAlt(['a', 'b'], true))],
 
                 // Tricky
-                '[^]': PatDis(CCAlt([], true)),
+                [/[^]/, PatDis(CCAlt([], true))],
+                //[')', new SyntaxError()],
 
-                '(a(.|[^d])c)': PatDis(CGAlt(Dis(PCAlt('a',
+                [/(a(.|[^d])c)/, PatDis(CGAlt(Dis(PCAlt('a',
                     CGAlt(
                         Dis(DOT_ALT, Dis(CCAlt(['d'], true))),
                         PCAlt('c')
-                    )
-                )))),
-                '(a*|b)': PatDis(CGAlt(Dis(QPCAlt('a', 'Star'), Dis(PCAlt('b'))))),
-                'f(.)z': PatDis(PCAlt('f', CGAlt(Dis(DOT_ALT), PCAlt('z')))),
-            };
+                    )))))],
+                [/(a*|b)/, PatDis(CGAlt(Dis(QPCAlt('a', 'Star'), Dis(PCAlt('b')))))],
+                [/f(.)z/, PatDis(PCAlt('f', CGAlt(Dis(DOT_ALT), PCAlt('z'))))],
+            ];
         } catch (e) {
             print("CAUGHT: " + e);
             print(e.stack);
@@ -1033,8 +1029,10 @@ function testParser() {
     var cases = makeTestCases();
     print('DONE MAKING TEST CASES.');
     print('Beginning tests...');
-    for (var pattern in cases) {
-        var expected = cases[pattern];
+    for (var i = 0; i < cases.length; ++i) {
+        var case_ = cases[i];
+        var pattern = typeof case_[0] === 'string' ? case_[0] : case_[0].source;
+        var expected = case_[1];
         var actual;
         try {
             actual = parse(Scanner(pattern));
