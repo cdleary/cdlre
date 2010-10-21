@@ -13,10 +13,13 @@ if (typeof uneval === 'undefined') {
      *          one browser...
      */
     uneval = function(obj) {
-        if (typeof obj === 'string') {
-            return '"' + obj + '"';
+        switch (typeof obj) {
+          case 'string': return '"' + obj + '"';
+          case 'number': return obj.toString();
+          case 'boolean': return obj.toString();
+          case 'undefined': return 'undefined';
         }
-        throw new Error("NYI");
+        throw new Error("NYI: " + typeof obj);
     };
 }
 
@@ -992,8 +995,6 @@ var TestConstructors = {
 
 function makeTestCases() {
     with (TestConstructors) {
-        // TODO: grouping assertions.
-
         try {
             return [
                 // Flat pattern
