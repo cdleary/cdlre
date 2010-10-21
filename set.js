@@ -31,6 +31,13 @@ Set.prototype.toString = function() {
 var SetUnion = function(set1, set2) {
     return {
         has: function(val) { return set1.has(val) || set2.has(val); },
-        toString: function() { return 'SetUnion(' + set1 + ', ' + set2 + ')' }
+        toString: function() { return 'SetUnion(' + set1 + ', ' + set2 + ')'; }
+    };
+};
+
+var SetDifference = function(set1, set2) {
+    return {
+        has: function(val) { return set1.has(val) && !set2.has(val); },
+        toString: function() { return 'SetDifference(' + set1 + ', ' + set2 + ')'; }
     };
 };

@@ -45,6 +45,7 @@ function Scanner(pattern) {
         nextCapturingNumber: function() { return ++nCapturingParens; },
         capturingParenCount: function() { return nCapturingParens; },
         tryPop: function() {
+            var argsArr = [];
             var indexBefore = index;
             for (var i = 0; i < arguments.length; ++i) {
                 var targetChar = arguments[i];
@@ -55,7 +56,9 @@ function Scanner(pattern) {
                     index = indexBefore;
                     return false;
                 }
+                argsArr.push(uneval(targetChar));
             }
+            log.debug("pop: " + argsArr.join(', '));
             index += arguments.length;
             return true;
         },
@@ -69,7 +72,7 @@ function Scanner(pattern) {
         pop: function() {
             if (index === pattern.length)
                 throw new Error("Popping past end of input");
-            log.debug("pop: " + pattern[index]);
+            log.debug("pop: " + uneval(pattern[index]));
             return pattern[index++];
         },
         /** Throw a SyntaxError when non-optional and a decimal digit is not found. */
@@ -104,6 +107,9 @@ function Scanner(pattern) {
         },
         toString: function() {
             return 'Scanner(pattern=' + uneval(pattern) + ', index=' + index + ')';
+        },
+        SyntaxError: function(msg) {
+            return new SyntaxError(msg + "; rest: " + uneval(self.rest));
         },
     };
 
@@ -528,8 +534,12 @@ function Pattern(disjunction) {
  ********************/
 
 /**
- * @return  An assertion on success, null on failure.
- * @post    The scanner will be advanced iff the parse is successful.
+ * Assertion ::= "^"
+ *             | "$"
+ *             | "\" "b"
+ *             | "\" "B"
+ *             | "(" "?" "=" Disjunction ")"
+ *             | "(" "?" "!" Disjunction ")"
  */
 function parseAssertion(scanner) {
     if (scanner.tryPop('^'))
@@ -553,9 +563,13 @@ function parseAssertion(scanner) {
         return Assertion.ZeroWidthPositive(parseDisjunction(scanner));
     if (scanner.tryPop('!'))
         return Assertion.ZerWidthNegative(parseDisjunction(scanner));
-    throw new SyntaxError('Invalid assertion start: ' + scanner.next);
+    throw scanner.SyntaxError('Invalid assertion start');
 }
 
+/**
+ * Quantifier ::= QuantifierPrefix
+ *              | QuantifierPrefix "?"
+ */
 function parseQuantifier(scanner) {
     var result;
     switch (scanner.next) {
@@ -566,7 +580,7 @@ function parseQuantifier(scanner) {
         scanner.pop();
         var firstDigits = scanner.popDecimalDigits();
         if (!firstDigits)
-            return;
+            throw scanner.SyntaxError('Digits required within numerical quantifier');
         if (!scanner.tryPop(',')) {
             scanner.popOrSyntaxError('}', 'Expected closing brace on quantifier prefix');
             return Quantifier.Fixed(scanner.tryPop('?'), firstDigits);
@@ -575,7 +589,7 @@ function parseQuantifier(scanner) {
         if (scanner.tryPop('}'))
             return Quantifier.LowerBound(scanner.tryPop('?'), firstDigits);
 
-        throw new Error("Quantifier prefix range");
+        throw new Error("NYI: Quantifier prefix range");
 
       default:
         return;
@@ -610,6 +624,12 @@ function parseAtomEscape(scanner) {
     throw new Error("NYI: other kinds of escapes");
 }
 
+/**
+ * ClassEscape ::= DecimalEscape
+ *               | "b"
+ *               | CharacterEscape
+ *               | CharacterClassEscape
+ */
 function parseClassEscape(scanner) {
     if (scanner.tryPop('b')) // Interesting: backspace character!
         return ClassEscape.BACKSPACE;
@@ -617,15 +637,15 @@ function parseClassEscape(scanner) {
 }
 
 /**
- * ClassAtomNoDash ::= SourceCharacter but not one of \ or ] or -
- *                   | \ ClassEscape
+ * ClassAtomNoDash ::= SourceCharacter but not one of "\" or "]" or "-"
+ *                   | "\" ClassEscape
  */
 function parseClassAtomNoDash(scanner) {
     parserLog.debug('parsing ClassAtomNoDash; rest: ' + uneval(scanner.rest));
     if (scanner.tryPop(BACKSLASH))
         return ClassAtomNoDash.ClassEscape(parseClassEscape(scanner));
     if (Set(BACKSLASH, ']', '-').has(scanner.next))
-        throw new SyntaxError('Invalid ClassAtomNoDash source character: ' + uneval(scanner.rest));
+        throw scanner.SyntaxError('Invalid ClassAtomNoDash source character');
 
     parserLog.debug("Popping class-atom source-character: " + uneval(scanner.next));
     return ClassAtomNoDash.SourceCharacter(scanner.pop());
@@ -633,7 +653,7 @@ function parseClassAtomNoDash(scanner) {
 
 /**
  * ClassAtom ::= ClassAtomNoDash
- *             | -
+ *             | "-"
  */
 function parseClassAtom(scanner) {
     parserLog.debug('parsing ClassAtom; rest: ' + uneval(scanner.rest));
@@ -647,7 +667,7 @@ function parseClassAtom(scanner) {
 /*
  * NonemptyClassRangesNoDash ::= ClassAtom
  *                             | ClassAtomNoDash NonemptyClassRangesNoDash
- *                             | ClassAtomNoDash - ClassAtom ClassRanges
+ *                             | ClassAtomNoDash "-" ClassAtom ClassRanges
  */
 function parseNonemptyClassRangesNoDash(scanner) {
     parserLog.debug('parsing NonemptyClassRangesNoDash; rest: ' + uneval(scanner.rest));
@@ -701,8 +721,8 @@ function parseNonemptyClassRanges(scanner) {
 }
 
 /**
- * ClassRanges ::= [empty]
- *               | NonemptyClassRanges
+ * ClassRanges ::= NonemptyClassRanges
+ *               | ε
  */
 function parseClassRanges(scanner) {
     parserLog.debug('parsing ClassRanges; rest: ' + uneval(scanner.rest));
@@ -712,8 +732,8 @@ function parseClassRanges(scanner) {
 }
 
 /**
- * CharacterClass ::= [ [lookahead ∉ {^}] ClassRanges ]
- *                  | [ ^ ClassRanges ]
+ * CharacterClass ::= [ [lookahead ∉ {"^"}] ClassRanges ]
+ *                  | [ "^" ClassRanges ]
  */
 function parseCharacterClass(scanner) {
     parserLog.debug('parsing CharacterClass; rest: ' + uneval(scanner.rest));
@@ -726,7 +746,17 @@ function parseCharacterClass(scanner) {
     return result;
 }
 
+/**
+ * Atom ::= PatternCharacter
+ *        | "."
+ *        | "\" AtomEscape
+ *        | CharacterClass
+ *        | "(" Disjunction ")"
+ *        | "(" "?" ":" Disjunction ")"
+ */
 function parseAtom(scanner) {
+    parserLog.debug('parsing Atom; rest: ' + uneval(scanner.rest));
+
     if (scanner.tryPop('['))
         return Atom.CharacterClass(parseCharacterClass(scanner));
 
@@ -739,24 +769,34 @@ function parseAtom(scanner) {
     if (scanner.tryPop('(')) {
         var result;
         if (scanner.tryPop('?', ':')) {
+            parserLog.debug('Atom :: "(" "?" ":" Disjunction ")"');
             result = Atom.NonCapturingGroup(parseDisjunction(scanner));
         } else {
+            parserLog.debug('Atom :: "(" Disjunction ")"');
             var number = scanner.nextCapturingNumber();
             result = Atom.CapturingGroup(parseDisjunction(scanner));
             result.capturingNumber = number;
         }
         if (!result)
-            throw new SyntaxError("Capturing group required");
+            throw scanner.SyntaxError("Capturing group required");
         scanner.popOrSyntaxError(')', 'Missing closing parenthesis on group');
         return result;
     }
 
     if (PatternCharacter.BAD.has(scanner.next))
-        return;
+        throw scanner.SyntaxError('Bad pattern character');
+
+    parserLog.debug('Atom :: PatternCharacter');
     return Atom.PatternCharacter(scanner.pop());
 }
 
+/**
+ * Term ::= Assertion
+ *        | Atom
+ *        | Atom Quantifier
+ */
 function parseTerm(scanner) {
+    parserLog.debug('parsing Term; rest: ' + uneval(scanner.rest));
     if (!(scanner instanceof Object))
         throw new Error('Bad scanner value: ' + scanner);
     var assertion = parseAssertion(scanner);
@@ -774,10 +814,14 @@ function parseTerm(scanner) {
  *               | ε
  */
 function parseAlternative(scanner) {
+    parserLog.debug('parsing Alternative; rest: ' + uneval(scanner.rest));
     if (!(scanner instanceof Object))
         throw new Error('Bad scanner value: ' + scanner);
-    if (scanner.length === 0)
+    if (scanner.length === 0 || parseAlternative.BAD_START.has(scanner.next)) {
+        parserLog.debug('Alternative :: ε');
         return Alternative.EMPTY;
+    }
+    parserLog.debug('Alternative :: Term Alternative');
     var term = parseTerm(scanner);
     if (!term)
         return;
@@ -785,23 +829,33 @@ function parseAlternative(scanner) {
     return Alternative(term, alternative);
 }
 
+parseAlternative.BAD_START = SetDifference(
+    PatternCharacter.BAD,
+    Set('.', BACKSLASH, '(', '[', '^', '$')
+);
+
 /**
  * Disjunction ::= Alternative
  *               | Alternative "|" Disjunction
  */
 function parseDisjunction(scanner) {
+    parserLog.debug('parsing Disjunction; rest: ' + uneval(scanner.rest));
     var lhs = parseAlternative(scanner);
-    if (scanner.next === '|') {
-        scanner.pop();
+    if (scanner.tryPop('|')) {
+        parserLog.debug('Disjunction :: Alternative "|" Disjunction');
         return Disjunction(lhs, parseDisjunction(scanner));
     }
+    parserLog.debug('Disjunction :: Alternative');
     return Disjunction(lhs);
 }
 
 function parse(scanner) {
     if (!(scanner instanceof Object))
         throw new Error('Bad scanner value: ' + scanner);
-    return Pattern(parseDisjunction(scanner));
+    var dis = parseDisjunction(scanner);
+    if (scanner.length !== 0)
+        throw new scanner.SyntaxError("Cruft at end of pattern");
+    return Pattern(dis);
 }
 
 function makeAST(pattern) { return parse(Scanner(pattern)); }
@@ -897,13 +951,9 @@ var TestConstructors = {
 
 function makeTestCases() {
     with (TestConstructors) {
-        var disabled = {
-            //'ca(?!t)\\w': PatDis(PCAlt
-            // TODO: grouping assertions.
+        //'ca(?!t)\\w': PatDis(PCAlt
+        // TODO: grouping assertions.
 
-            // TODO: expected syntax error category
-        };
-        // TODO: turn into two-tuples so that regexp literals can be used.
         try {
             return [
                 // Flat pattern
@@ -934,7 +984,8 @@ function makeTestCases() {
 
                 // Tricky
                 [/[^]/, PatDis(CCAlt([], true))],
-                //[')', new SyntaxError()],
+                [')', new SyntaxError()],
+                ['(', new SyntaxError()],
 
                 [/(a(.|[^d])c)/, PatDis(CGAlt(Dis(PCAlt('a',
                     CGAlt(
@@ -1029,25 +1080,48 @@ function testParser() {
     var cases = makeTestCases();
     print('DONE MAKING TEST CASES.');
     print('Beginning tests...');
-    for (var i = 0; i < cases.length; ++i) {
-        var case_ = cases[i];
-        var pattern = typeof case_[0] === 'string' ? case_[0] : case_[0].source;
-        var expected = case_[1];
+
+    var testSuccess = function(pattern, expected) {
         var actual;
         try {
             actual = parse(Scanner(pattern));
             checkParseEquality(expected, actual);
-            print("PASSED: " + uneval(pattern));
+            print("PASSED: " + new RegExp(pattern));
         } catch (e) {
-            print("... pattern: " + uneval(pattern));
+            print("... exception: " + e);
+            print("... pattern:   " + uneval(pattern));
             if (!actual) {
                 print(e.stack);
-                continue;
+                return;
             }
             var colWidth = 50;
             print(juxtapose('Expected', 'Actual', colWidth));
             print(juxtapose('========', '======', colWidth));
             print(juxtapose(pformat(expected), pformat(actual), colWidth));
+        }
+    };
+
+    var testFailure = function(pattern, expected) {
+        var actual;
+        try {
+            actual = parse(Scanner(pattern));
+            print("FAILED TO RAISE: " + uneval(pattern));
+        } catch (e) {
+            if (e.constructor === expected.constructor)
+                print("PASSED: " + uneval(pattern));
+            else
+                print("FAILED: wrong error");
+        }
+    }
+
+    for (var i = 0; i < cases.length; ++i) {
+        var case_ = cases[i];
+        var pattern = typeof case_[0] === 'string' ? case_[0] : case_[0].source;
+        var expected = case_[1];
+        if (expected instanceof Error) {
+            testFailure(pattern, expected);
+        } else {
+            testSuccess(pattern, expected);
         }
     }
     print('Finished tests.');
