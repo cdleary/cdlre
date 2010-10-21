@@ -6,6 +6,7 @@
 // type MatchResult = State | FAILURE
 
 var MatchResult = {FAILURE: "failure"};
+var LINE_TERMINATOR = Set('\n', '\r', '\u2028', '\u2029');
 
 function IdentityContinuation(state) { return state; }
 function identity(x) { return x; }
@@ -158,6 +159,31 @@ ProcedureBuilder.prototype.repeatMatcher = function(m, min, max, greedy, x, c,
     return c(x);
 }
 
+ProcedureBuilder.prototype.evalAssertion = function(assertion) {
+    var self = this;
+    if (assertion === Assertion.BOL) {
+        return function assertionTester(x) {
+            var e = x.endIndex;
+            if (e === 0)
+                return true;
+            if (!self.multiline)
+                return false;
+            return LINE_TERMINATOR.has(self.input[e - 1]);
+        };
+    } else if (assertion === Assertion.EOL) {
+        return function assertionTester(x) {
+            var e = x.endIndex;
+            if (e === self.inputLength)
+                return true;
+            if (!self.multiline)
+                return false;
+            return LINE_TERMINATOR.has(self.input[e]);
+        };
+    } else {
+        throw new Error("NYI");
+    }
+};
+
 ProcedureBuilder.prototype.evalTerm = function(term) {
     var self = this;
     self.clog.debug("evaluating term");
@@ -173,7 +199,18 @@ ProcedureBuilder.prototype.evalTerm = function(term) {
             return self.repeatMatcher(m, min, max, greedy, x, c, parenIndex, parenCount);
         };
     }
-    throw new Error("NYI");
+
+    if (term.atom)
+        return this.evalAtom(term.atom);
+
+    if (term.assertion) {
+        return function matcher(x, c) {
+            var t = self.evalAssertion(term.assertion);
+            var r = t(x);
+            return r ? c(x) : MatchResult.FAILURE;
+        };
+    }
+    throw new Error("Unreachable: " + term);
 };
 
 ProcedureBuilder.prototype.evalClassEscape = function(ce) {

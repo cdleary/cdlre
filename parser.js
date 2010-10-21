@@ -32,7 +32,7 @@ function Scanner(pattern) {
     var cc9 = ord('9');
     var nCapturingParens = 0;
 
-    /** Convert a digit character into its integral form. */
+    /** Convert a digit character to its numerical form. */
     var toDigit = function(c) {
         var ccc = ord(c);
         // TODO: test corner case with leading zeros.
@@ -457,32 +457,38 @@ var Atom = (function() {
     };
 })();
 
-function Term(assertion, atom, quantifier) {
-    if (assertion && assertion.nodeType !== 'Assertion')
-        throw new Error('Bad assertion value: ' + assertion);
-    if (atom && atom.nodeType !== 'Atom')
-        throw new Error('Bad atom value: ' + atom);
-    if (quantifier && quantifier.nodeType !== 'Quantifier')
-        throw new Error('Bad quantifier value: ' + quantifier);
-    if (!assertion && !atom && !quantifier)
-        throw new Error("Bad empty term");
+var Term = (function() {
+    function Term(assertion, atom, quantifier) {
+        if (assertion && assertion.nodeType !== 'Assertion')
+            throw new Error('Bad assertion value: ' + assertion);
+        if (atom && atom.nodeType !== 'Atom')
+            throw new Error('Bad atom value: ' + atom);
+        if (quantifier && quantifier.nodeType !== 'Quantifier')
+            throw new Error('Bad quantifier value: ' + quantifier);
+        if (!assertion && !atom && !quantifier)
+            throw new Error("Bad empty term");
+
+        return {
+            nodeType: "Term",
+            assertion: assertion,
+            atom: atom,
+            quantifier: quantifier,
+            toString: function() {
+                if (this.atom && !this.quantifier)
+                    return "Term.wrapAtom(" + this.atom + ")";
+                if (this.assertion)
+                    return "Term.wrapAssertion(" + this.assertion + ")";
+                return (this.nodeType + "(assertion=" + this.assertion + ", atom=" +
+                        this.atom + ", quantifier=" + this.quantifier + ")");
+            },
+        };
+    }
 
     return {
-        nodeType: "Term",
-        assertion: assertion,
-        atom: atom,
-        quantifier: quantifier,
-        toString: function() {
-            if (this.atom && !this.quantifier)
-                return "Term.wrapAtom(" + this.atom + ")";
-            return (this.nodeType + "(assertion=" + this.assertion + ", atom=" +
-                    this.atom + ", quantifier=" + this.quantifier + ")");
-        },
+        wrapAtom: function(atom, quantifier) { return Term(null, atom, quantifier); },
+        wrapAssertion: function(assertion) { return Term(assertion, null, null); }
     };
-}
-
-Term.wrapAtom = function(atom, quantifier) { return Term(null, atom, quantifier); };
-Term.wrapAssertion = function(assertion) { return Term(assertion, null, null); }
+})();
 
 function Alternative(term, alternative) {
     if (term && term.nodeType !== 'Term')
@@ -1013,6 +1019,7 @@ function makeTestCases() {
                 [/[^]/, PatDis(CCAlt([], true))],
                 [')', new SyntaxError()],
                 ['(', new SyntaxError()],
+                ['a{010}', PatDis(QPCAlt('a', 'Fixed', false, 10))],
 
                 [/(a(.|[^d])c)/, PatDis(CGAlt(Dis(PCAlt('a',
                     CGAlt(

@@ -172,6 +172,7 @@ function testCDLRE() {
     var tests = [
         [/(a|d|q|)x/i, "bcaDxqy"],
         [/x86_64/, "x86_64-gcc3"],
+        ['^a{010}', "aaaaaaaaaa"],
         [/a*b/, "aaadaabaaa"],
         [/a*b/, "dddb"],
         [/a*b/, "xxx"],
