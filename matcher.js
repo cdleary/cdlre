@@ -258,7 +258,6 @@ ProcedureBuilder.prototype.evalNonemptyClassRanges = function(necr) {
     var A = this.evalClassAtom(necr.classAtom);
     if (necr.kind === 'NoDash') {
         var B = this.evalNonemptyClassRangesNoDash(necr.value);
-        // TODO: factor out this union helper.
         return this.CharSetUnion(A, B);
     }
     var otherClassAtom = necr.value[0];

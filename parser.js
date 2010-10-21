@@ -35,7 +35,6 @@ function Scanner(pattern) {
     /** Convert a digit character to its numerical form. */
     var toDigit = function(c) {
         var ccc = ord(c);
-        // TODO: test corner case with leading zeros.
         if (cc0 <= ccc && ccc <= cc9)
             return ccc - cc0;
         throw new Error("Non-digit character: " + c);
@@ -150,8 +149,8 @@ var Assertion = (function() {
         EOL: Assertion('EndOfLine'),
         WB: Assertion('WordBoundary'),
         NWB: Assertion('NotWordBoundary'),
-        ZeroWidthPositive: Assertion.bind('ZeroWidthPositive'),
-        ZeroWidthNegative: Assertion.bind('ZeroWidthNegative'),
+        ZeroWidthPositive: Assertion.bind(null, 'ZeroWidthPositive'),
+        ZeroWidthNegative: Assertion.bind(null, 'ZeroWidthNegative'),
     };
 })();
 
@@ -584,10 +583,16 @@ function parseAssertion(scanner) {
     if (!scanner.tryPop('(', '?'))
         return;
 
-    if (scanner.tryPop('='))
-        return Assertion.ZeroWidthPositive(parseDisjunction(scanner));
-    if (scanner.tryPop('!'))
-        return Assertion.ZerWidthNegative(parseDisjunction(scanner));
+    if (Set('=', '!').has(scanner.next)) {
+        var constructor = scanner.next === '!'
+                          ? Assertion.ZeroWidthNegative
+                          : Assertion.ZeroWidthPositive;
+        scanner.pop();
+        var dis = parseDisjunction(scanner);
+        scanner.assert(dis);
+        scanner.popOrSyntaxError(')', 'Expected closing paren at end of assertion group');
+        return constructor(dis);
+    }
     throw scanner.SyntaxError('Invalid assertion start');
 }
 
@@ -943,6 +948,9 @@ var TestConstructors = {
             return result;
         },
         EOL: Alternative(Term.wrapAssertion(Assertion.EOL)),
+        Zwn: function (dis, nextAlt) {
+            return Alternative(Term.wrapAssertion(Assertion.ZeroWidthNegative(dis)), nextAlt);
+        }
     },
     /** Character class range alternative. */
     CCRAlt: function(low, high, inverted) {
@@ -984,7 +992,6 @@ var TestConstructors = {
 
 function makeTestCases() {
     with (TestConstructors) {
-        //'ca(?!t)\\w': PatDis(PCAlt
         // TODO: grouping assertions.
 
         try {
@@ -1008,6 +1015,8 @@ function makeTestCases() {
                 [/^abc/, PatDis(AssAlt.BOLConcat(PCAlt('abc')))],
                 [/def$/, PatDis(PCAlt('def', AssAlt.EOL))],
                 [/^abcdef$/, PatDis(AssAlt.BOLConcat(PCAlt('abcdef', AssAlt.EOL)))],
+                // Grouping assertions
+                [/ca(?!t)/, PatDis(PCAlt('ca', AssAlt.Zwn(Dis(PCAlt('t')))))],
                 // Builtin character classes
                 [/\w/, PatDis(CCEAlt.WORD)],
                 // Character classes

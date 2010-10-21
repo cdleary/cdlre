@@ -164,6 +164,7 @@ function testCDLRE() {
             fail();
     }
     var disabledTests = [
+        // TODO: use digits in quantifier range that overflow the 32/64b space.
         // Backreferences.
         [/(a*)b\1/, "abaaaxaabaayy"],
         [/(a*)b\1/, "cccdaaabaxaabaayy"],
@@ -173,6 +174,7 @@ function testCDLRE() {
         [/(a|d|q|)x/i, "bcaDxqy"],
         [/x86_64/, "x86_64-gcc3"],
         ['^a{010}', "aaaaaaaaaa"],
+        ['^a{0000010}', "aaaaaaaaaa"],
         [/a*b/, "aaadaabaaa"],
         [/a*b/, "dddb"],
         [/a*b/, "xxx"],
