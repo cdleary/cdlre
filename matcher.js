@@ -36,7 +36,7 @@ ProcedureBuilder.prototype.CharSet = function() {
     set.hasCanonicalized = function(tcc) {
         var found = false;
         set.each(function(c) {
-            cc = self.canonicalize(c);
+            var cc = self.canonicalize(c);
             if (cc === tcc) {
                 found = true;
                 return true;
@@ -233,6 +233,23 @@ ProcedureBuilder.prototype.evalClassAtom = function(ca) {
     }
 };
 
+ProcedureBuilder.prototype.CharacterRange = function(A, B) {
+    var self = this;
+    if (A.length !== 1 || B.length !== 1)
+        throw new SyntaxError("Can't use a set as an endpoint in a character range: "
+                              + A + ' to ' + B);
+    var a = A.pop();
+    var b = B.pop();
+    var i = ord(a);
+    var j = ord(b);
+    if (i > j)
+        throw new SyntaxError('Invalid character range: ' + A + ' to ' + B);
+    var chars = [];
+    while (i <= j)
+        chars.push(chr(i++));
+    return self.CharSet.apply(self, chars);
+};
+
 ProcedureBuilder.prototype.evalNonemptyClassRangesNoDash = function(necrnd) {
     switch (necrnd.kind) {
       case 'ClassAtom':
@@ -253,19 +270,20 @@ ProcedureBuilder.prototype.evalNonemptyClassRangesNoDash = function(necrnd) {
 };
 
 ProcedureBuilder.prototype.evalNonemptyClassRanges = function(necr) {
+    var self = this;
     if (necr.kind === 'NoDash' && !necr.value)
-        return this.evalClassAtom(necr.classAtom);
-    var A = this.evalClassAtom(necr.classAtom);
+        return self.evalClassAtom(necr.classAtom);
+    var A = self.evalClassAtom(necr.classAtom);
     if (necr.kind === 'NoDash') {
-        var B = this.evalNonemptyClassRangesNoDash(necr.value);
-        return this.CharSetUnion(A, B);
+        var B = self.evalNonemptyClassRangesNoDash(necr.value);
+        return self.CharSetUnion(A, B);
     }
     var otherClassAtom = necr.value[0];
     var classRanges = necr.value[1];
-    var B = this.evalClassAtom(otherClassAtom);
-    var C = this.evalClassRanges(classRanges);
-    var D = this.CharacterRange(A, B);
-    return this.CharSetUnion(D, C);
+    var B = self.evalClassAtom(otherClassAtom);
+    var C = self.evalClassRanges(classRanges);
+    var D = self.CharacterRange(A, B);
+    return self.CharSetUnion(D, C);
 };
 
 ProcedureBuilder.prototype.evalClassRanges = function(cr) {

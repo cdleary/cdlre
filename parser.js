@@ -27,6 +27,7 @@ var BACKSLASH = '\\';
 var parserLog = new Logger('Parser');
 
 function ord(c) { return c.charCodeAt(0); }
+function chr(n) { return String.fromCharCode(n); }
 
 function Scanner(pattern) {
     var log = new Logger("Scanner");
@@ -601,6 +602,12 @@ function parseAssertion(scanner) {
 /**
  * Quantifier ::= QuantifierPrefix
  *              | QuantifierPrefix "?"
+ * QuantifierPrefix ::= "*"
+ *                    | "+"
+ *                    | "?"
+ *                    | "{" DecimalDigits "}"
+ *                    | "{" DecimalDigits "," "}"
+ *                    | "{" DecimalDigits "," DecimalDigits "}"
  * Fallible.
  */
 function parseQuantifier(scanner) {
@@ -612,17 +619,23 @@ function parseQuantifier(scanner) {
       case '{':
         scanner.pop();
         var firstDigits = scanner.popDecimalDigits();
-        if (!firstDigits)
+        if (firstDigits === undefined)
             throw scanner.SyntaxError('Digits required within numerical quantifier');
+
         if (!scanner.tryPop(',')) {
             scanner.popOrSyntaxError('}', 'Expected closing brace on quantifier prefix');
             return Quantifier.Fixed(scanner.tryPop('?'), firstDigits);
         }
 
+        /* If we get here, we popped a comma! */
         if (scanner.tryPop('}'))
             return Quantifier.LowerBound(scanner.tryPop('?'), firstDigits);
 
-        throw new Error("NYI: Quantifier prefix range");
+        var secondDigits = scanner.popDecimalDigits();
+        scanner.assert(secondDigits !== undefined);
+        var result = Quantifier.Range(scanner.tryPop('?'), [firstDigits, secondDigits]);
+        scanner.popOrSyntaxError('}', 'Missing closing brace on ranged quantifier');
+        return result;
 
       default:
         return;

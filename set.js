@@ -1,12 +1,31 @@
 /* Set(a, b, c, ...) makes a set keyed on |toString| values. */
 function Set() {
-    if (!(this instanceof Set))
+    var self = this;
+    if (!(self instanceof Set))
         return new Set(arguments);
     var items = arguments[0];
-    this._map = {};
+    self._map = {};
     for (var i = 0; i < items.length; ++i)
-        this._map[items[i]] = null;
+        self._map[items[i]] = null;
+    self._length = items.length;
+    Object.defineProperty(self, 'length', {get: function() { return self._length; }});
 }
+
+Set.prototype.pop = function() {
+    var self = this;
+    if (!self._length)
+        throw new Error("Empty set");
+    var result;
+    for (var key in self._map) {
+        if (!self._map.hasOwnProperty(key))
+            continue;
+        result = key;
+        delete self._map[key];
+        break;
+    }
+    self._length -= 1;
+    return result;
+};
 
 Set.prototype.has = function(item) {
     return item in this._map;
