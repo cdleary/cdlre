@@ -324,6 +324,12 @@ function testCDLRE() {
         //[/x\d\dy/, "abcx45ysss235"], FIXME digit atom escape
         [/[^abc]def[abc]+/, "abxdefbb"],
     ];
+    var tests = [
+        //[/a[b-]/i, "A-"],
+        //[/a\(*b/i, "A((B"],
+        //[/a\(*b/i, "AB"],
+        [/a\(b/i, "A(B"],
+    ];
     var extractFlags = function(re) {
         var flags = [(re.ignoreCase ? 'i' : ''),
                      (re.multiline ? 'm' : ''),

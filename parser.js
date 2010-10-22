@@ -24,10 +24,17 @@ if (typeof uneval === 'undefined') {
 }
 
 var BACKSLASH = '\\';
+var ZWNJ = '\u200c'; /* Zero width non-joiner. */
+var ZWJ = '\u200d'; /* Zero-width joiner; FIXME: spec has wrong value. */
 var parserLog = new Logger('Parser');
 
 function ord(c) { return c.charCodeAt(0); }
 function chr(n) { return String.fromCharCode(n); }
+function isAlpha(c) {
+    var cc = ord(c);
+    return ord('a') <= cc && cc <= ord('z') ||
+           ord('A') <= cc && cc <= ord('Z');
+}
 
 function Scanner(pattern) {
     var log = new Logger("Scanner");
@@ -292,6 +299,22 @@ var AtomEscape = (function() {
             NOT_SPACE: AtomEscape(undefined, undefined, CharacterClassEscape('NotSpace')),
             WORD: AtomEscape(undefined, undefined, CharacterClassEscape('Word')),
             NOT_WORD: AtomEscape(undefined, undefined, CharacterClassEscape('NotWord')),
+        },
+        ControlLetter: function(letter) {
+            throw new Error("NYI");
+        },
+        ControlEscape: {
+            f: undefined,
+            n: undefined,
+            r: undefined,
+            t: undefined,
+            v: undefined,
+        },
+        HexEscapeSequence: function(digits) { throw new Error("NYI"); },
+        UnicodeEscapeSequence: function(digits) {
+            if (digits.length !== 4)
+                throw new Error("Bad value for unicode escape sequence digits: " + digits);
+            throw new Error("NYI");
         },
     };
 })();
@@ -668,10 +691,28 @@ function parseQuantifier(scanner) {
  * AtomEscape ::= DecimalEscape
  *              | CharacterClassEscape
  *              | CharacterEscape
+ * CharacterEscape ::= ControlEscape
+ *                   | "c" ControlLetter
+ *                   | HexEscapeSequence
+ *                   | UnicodeEscapeSequence
+ *                   | IdentityEscape
+ * UnicodeEscapeSequence ::= "u" HexDigit HexDigit HexDigit HexDigit 
+ * HexEscapeSequence ::= "x" HexDigit HexDigit
+ * IdentityEscape ::= SourceCharacter but not IdentifierPart
+ *                  | <ZWJ>
+ *                  | <ZWNJ>
+ * IdentifierPart ::= IdentifierStart
+ *                  | UnicodeCombiningMark (Unicode categories Mn, Mc)
+ *                  | UnicodeDigit (Unicode category Nd)
+ *                  | UnicodeConnectorPunctuation (Unicode category Pc)
+ * IdentifierStart ::= UnicodeLetter (Unicode categories Lu, Ll, Lt, Lm, Lo, Nl)
+ *                   | "$"
+ *                   | "_" 
  *
  * @note Backslash character has already been popped of the scanner.
  */
 function parseAtomEscape(scanner) {
+    /* DecimalEscape */
     var dec = scanner.popDecimalIntegerLiteral();
     if (dec !== undefined)
         return AtomEscape.DecimalEscape(dec);
@@ -691,6 +732,39 @@ function parseAtomEscape(scanner) {
         return AtomEscape.CharacterClassEscape.NOT_WORD;
 
     /* CharacterEscape */
+
+    /* - ControlLetter */
+    if (scanner.tryPop('c')) {
+        var cl = scanner.pop();
+        if (!isAlpha(cl))
+            throw scanner.SyntaxError('Non-alphabet character in control letter escape');
+        return AtomEscape.ControlLetter(cl);
+    }
+
+    /* - ControlEscape */
+    if (scanner.next in AtomEscape.ControlEscape)
+        return AtomEscape.ControlEscape[scanner.pop()];
+    
+    if (scanner.tryPop('x'))
+        return AtomEscape.HexEscapeSequence(scanner.popHexDigits(2));
+
+    if (scanner.tryPop('u'))
+        return AtomEscape.UnicodeEscapeSequence(scanner.popHexDigits(4));
+
+    if (scanner.tryPop(ZWJ))
+        return AtomEscape.IdentityEscape(ZWJ);
+    if (scanner.tryPop(ZWNJ))
+        return AtomEscape.IdentityEscape(ZWNJ);
+
+    if (Unicode.CategorySet('Mn', 'Mc', 'Nd', 'Pc', 'Lu', 'Ll', 'Lt', 'Lm', 'Lo', 'Nl')
+                           .has(scanner.next)) {
+        throw scanner.SyntaxError('Invalid character for identity escape');
+    }
+
+    if (Set('$', '_').has(scanner.next))
+        throw scanner.SyntaxError("Invalid escape; identifier part");
+
+    return AtomEscape.IdentityEscape(scanner.pop());
 }
 
 /**
@@ -832,8 +906,10 @@ function parseAtom(scanner) {
     if (scanner.tryPop('.'))
         return Atom.DOT;
 
-    if (scanner.tryPop(BACKSLASH))
+    if (scanner.tryPop(BACKSLASH)) {
+        parserLog.debug('Atom :: "\\" AtomEscape');
         return Atom.AtomEscape(parseAtomEscape(scanner));
+    }
 
     if (scanner.tryPop('(')) {
         var result;
