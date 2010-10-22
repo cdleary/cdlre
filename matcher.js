@@ -300,19 +300,18 @@ ProcedureBuilder.prototype.evalCharacterClass = function(cc) {
 ProcedureBuilder.prototype.evalAtom = function(atom) {
     var self = this;
     self.clog.debug("evaluating atom");
-    if (atom.kind === 'PatternCharacter') {
+    switch (atom.kind) {
+      case 'PatternCharacter':
         var ch = atom.value.sourceCharacter;
-        return self.CharacterSetMatcher(this.CharSet(ch), false);
-    }
-    if (atom.kind === 'Dot') {
+        return self.CharacterSetMatcher(self.CharSet(ch), false);
+      case 'Dot':
         return self.CharacterSetMatcher({
             has: function(ch) { return ch !== '\n'; },
             hasCanonicalized: function(cch) {
                 return cch !== self.canonicalize('\n');
             }
         }, false);
-    }
-    if (atom.kind === 'CapturingGroup') {
+      case 'CapturingGroup':
         var m = self.evalDisjunction(atom.value);
         var parenIndex = atom.capturingNumber;
         return function matcher(x, c) {
@@ -331,12 +330,14 @@ ProcedureBuilder.prototype.evalAtom = function(atom) {
             };
             return m(x, d);
         };
+      case 'CharacterClass':
+        var result = self.evalCharacterClass(atom.value);
+        return self.CharacterSetMatcher(result.charSet, result.inverted);
+      case 'NonCapturingGroup':
+        return self.evalDisjunction(atom.value);
+      default:
+        throw new Error("NYI: " + atom);
     }
-    if (atom.kind === 'CharacterClass') {
-        var result = this.evalCharacterClass(atom.value);
-        return this.CharacterSetMatcher(result.charSet, result.inverted);
-    }
-    throw new Error("NYI: " + atom);
 };
 
 ProcedureBuilder.prototype.CharacterSetMatcher = function(charSet, invert) {
