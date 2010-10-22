@@ -36,6 +36,11 @@ function Scanner(pattern) {
     var cc9 = ord('9');
     var nCapturingParens = 0;
 
+    var isDigit = function(c) {
+        var ccc = ord(c);
+        return cc0 <= ccc && ccc <= cc9;
+    };
+
     /** Convert a digit character to its numerical form. */
     var toDigit = function(c) {
         var ccc = ord(c);
@@ -79,6 +84,17 @@ function Scanner(pattern) {
                 throw new Error("Popping past end of input");
             log.debug("pop: " + uneval(pattern[index]));
             return pattern[index++];
+        },
+        /** Note: assumes that a digit may not be the lookahead. */
+        popDecimalIntegerLiteral: function() {
+            if (!isDigit(pattern[index]))
+                return;
+            if (pattern[index] === '0' && isDigit(pattern[index + 1]))
+                return;
+            var accum = 0;
+            while (isDigit(pattern[index]))
+                accum = accum * 10 + toDigit(pattern[index++]);
+            return accum;
         },
         /** Throw a SyntaxError when non-optional and a decimal digit is not found. */
         popDecimalDigit: function(optional) {
@@ -650,12 +666,17 @@ function parseQuantifier(scanner) {
 
 /**
  * AtomEscape ::= DecimalEscape
- *              | CharacterEscape
  *              | CharacterClassEscape
+ *              | CharacterEscape
  *
  * @note Backslash character has already been popped of the scanner.
  */
 function parseAtomEscape(scanner) {
+    var dec = scanner.popDecimalIntegerLiteral();
+    if (dec !== undefined)
+        return AtomEscape.DecimalEscape(dec);
+
+    /* CharacterClassEscape */
     if (scanner.tryPop('d'))
         return AtomEscape.CharacterClassEscape.DIGIT;
     if (scanner.tryPop('D'))
@@ -669,7 +690,7 @@ function parseAtomEscape(scanner) {
     if (scanner.tryPop('W'))
         return AtomEscape.CharacterClassEscape.NOT_WORD;
 
-    throw new Error("NYI: other kinds of escapes");
+    /* CharacterEscape */
 }
 
 /**
