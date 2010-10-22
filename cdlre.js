@@ -325,10 +325,7 @@ function testCDLRE() {
         [/[^abc]def[abc]+/, "abxdefbb"],
     ];
     var tests = [
-        //[/a[b-]/i, "A-"],
-        //[/a\(*b/i, "A((B"],
-        //[/a\(*b/i, "AB"],
-        [/a\(b/i, "A(B"],
+        [/a[b-]/i, "A-"],
     ];
     var extractFlags = function(re) {
         var flags = [(re.ignoreCase ? 'i' : ''),

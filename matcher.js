@@ -297,6 +297,26 @@ ProcedureBuilder.prototype.evalCharacterClass = function(cc) {
     return {charSet: charSet, inverted: cc.inverted};
 };
 
+ProcedureBuilder.prototype.evalCharacterEscape = function(ce) {
+    switch (ce.kind) {
+      case 'IdentityEscape':
+        return ce.value.value;
+      default:
+        throw new Error("NYI");
+    }
+};
+
+ProcedureBuilder.prototype.evalAtomEscape = function(ae) {
+    var self = this;
+    if (ae.characterEscape) {
+        var ch = self.evalCharacterEscape(ae.characterEscape);
+        var A = self.CharSet(ch);
+        return self.CharacterSetMatcher(A, false);
+    }
+
+    throw new Error("NYI");
+};
+
 ProcedureBuilder.prototype.evalAtom = function(atom) {
     var self = this;
     self.clog.debug("evaluating atom");
@@ -335,6 +355,8 @@ ProcedureBuilder.prototype.evalAtom = function(atom) {
         return self.CharacterSetMatcher(result.charSet, result.inverted);
       case 'NonCapturingGroup':
         return self.evalDisjunction(atom.value);
+      case 'AtomEscape':
+        return self.evalAtomEscape(atom.value);
       default:
         throw new Error("NYI: " + atom);
     }

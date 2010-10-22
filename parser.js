@@ -274,7 +274,29 @@ var AtomEscape = (function() {
         };
     }
 
-    CharacterClassEscape.WORD = CharacterClassEscape('Word');
+    function CharacterEscape(kind, value) {
+        var kinds = Set('ControlEscape', 'ControlLetter', 'HexEscapeSequence',
+                        'UnicodeEscapeSequence', 'IdentityEscape');
+        if (!kinds.has(kind))
+            throw new Error("Bad character escape kind");
+
+        return {
+            nodeType: 'CharacterEscape',
+            kind: kind,
+            value: value,
+            toString: function() {
+                return this.nodeType + '.' + this.kind + '(' + value + ')';
+            },
+        };
+    }
+
+    CharacterEscape.IdentityEscape = function(c) {
+        return CharacterEscape('IdentityEscape', {
+            nodeType: 'IdentityEscape',
+            value: c,
+            toString: function() { return this.nodeType + '(' + this.value + ')'; }
+        });
+    };
 
     function AtomEscape(decimalEscape, characterEscape, characterClassEscape) {
         return {
@@ -300,21 +322,26 @@ var AtomEscape = (function() {
             WORD: AtomEscape(undefined, undefined, CharacterClassEscape('Word')),
             NOT_WORD: AtomEscape(undefined, undefined, CharacterClassEscape('NotWord')),
         },
-        ControlLetter: function(letter) {
-            throw new Error("NYI");
-        },
-        ControlEscape: {
-            f: undefined,
-            n: undefined,
-            r: undefined,
-            t: undefined,
-            v: undefined,
-        },
-        HexEscapeSequence: function(digits) { throw new Error("NYI"); },
-        UnicodeEscapeSequence: function(digits) {
-            if (digits.length !== 4)
-                throw new Error("Bad value for unicode escape sequence digits: " + digits);
-            throw new Error("NYI");
+        CharacterEscape: {
+            ControlLetter: function(letter) {
+                throw new Error("NYI");
+            },
+            ControlEscape: {
+                f: undefined,
+                n: undefined,
+                r: undefined,
+                t: undefined,
+                v: undefined,
+            },
+            HexEscapeSequence: function(digits) { throw new Error("NYI"); },
+            UnicodeEscapeSequence: function(digits) {
+                if (digits.length !== 4)
+                    throw new Error("Bad value for unicode escape sequence digits: " + digits);
+                throw new Error("NYI");
+            },
+            IdentityEscape: function(c) {
+                return AtomEscape(undefined, CharacterEscape.IdentityEscape(c), undefined);
+            }
         },
     };
 })();
@@ -732,29 +759,30 @@ function parseAtomEscape(scanner) {
         return AtomEscape.CharacterClassEscape.NOT_WORD;
 
     /* CharacterEscape */
+    var CE = AtomEscape.CharacterEscape;
 
     /* - ControlLetter */
     if (scanner.tryPop('c')) {
         var cl = scanner.pop();
         if (!isAlpha(cl))
             throw scanner.SyntaxError('Non-alphabet character in control letter escape');
-        return AtomEscape.ControlLetter(cl);
+        return CE.ControlLetter(cl);
     }
 
     /* - ControlEscape */
-    if (scanner.next in AtomEscape.ControlEscape)
-        return AtomEscape.ControlEscape[scanner.pop()];
+    if (scanner.next in CE.ControlEscape)
+        return CE.ControlEscape[scanner.pop()];
     
     if (scanner.tryPop('x'))
-        return AtomEscape.HexEscapeSequence(scanner.popHexDigits(2));
+        return CE.HexEscapeSequence(scanner.popHexDigits(2));
 
     if (scanner.tryPop('u'))
-        return AtomEscape.UnicodeEscapeSequence(scanner.popHexDigits(4));
+        return CE.UnicodeEscapeSequence(scanner.popHexDigits(4));
 
     if (scanner.tryPop(ZWJ))
-        return AtomEscape.IdentityEscape(ZWJ);
+        return CE.IdentityEscape(ZWJ);
     if (scanner.tryPop(ZWNJ))
-        return AtomEscape.IdentityEscape(ZWNJ);
+        return CE.IdentityEscape(ZWNJ);
 
     if (Unicode.CategorySet('Mn', 'Mc', 'Nd', 'Pc', 'Lu', 'Ll', 'Lt', 'Lm', 'Lo', 'Nl')
                            .has(scanner.next)) {
@@ -764,7 +792,7 @@ function parseAtomEscape(scanner) {
     if (Set('$', '_').has(scanner.next))
         throw scanner.SyntaxError("Invalid escape; identifier part");
 
-    return AtomEscape.IdentityEscape(scanner.pop());
+    return CE.IdentityEscape(scanner.pop());
 }
 
 /**
