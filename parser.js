@@ -27,6 +27,8 @@ var BACKSLASH = '\\';
 var ZWNJ = '\u200c'; /* Zero width non-joiner. */
 var ZWJ = '\u200d'; /* Zero-width joiner; FIXME: spec has wrong value. */
 var parserLog = new Logger('Parser');
+parserLog.start = function(prod) { return this.info('Starting production: ' + prod); };
+parserLog.resolve = function(resolution) { return this.info('Resolved production: ' + resolution); };
 
 function ord(c) { return c.charCodeAt(0); }
 function chr(n) { return String.fromCharCode(n); }
@@ -57,6 +59,12 @@ function Scanner(pattern) {
     };
 
     var self = {
+        start: function(prod) {
+            parserLog.info('SPROD: ' + prod + ' @ ' + uneval(self.rest));
+        },
+        resolve: function(resolution) {
+            parserLog.info('RPROD: ' + resolution + ' @ ' + uneval(self.rest));
+        },
         nextCapturingNumber: function() { return ++nCapturingParens; },
         capturingParenCount: function() { return nCapturingParens; },
         tryPop: function() {
@@ -812,9 +820,11 @@ function parseClassEscape(scanner) {
  *                   | "\" ClassEscape
  */
 function parseClassAtomNoDash(scanner) {
-    parserLog.debug('parsing ClassAtomNoDash; rest: ' + uneval(scanner.rest));
+    scanner.start('ClassAtomNoDash');
+
     if (scanner.tryPop(BACKSLASH))
         return ClassAtomNoDash.ClassEscape(parseClassEscape(scanner));
+
     if (Set(BACKSLASH, ']', '-').has(scanner.next))
         throw scanner.SyntaxError('Invalid ClassAtomNoDash source character');
 
@@ -827,7 +837,7 @@ function parseClassAtomNoDash(scanner) {
  *             | "-"
  */
 function parseClassAtom(scanner) {
-    parserLog.debug('parsing ClassAtom; rest: ' + uneval(scanner.rest));
+    scanner.start('ClassAtom');
 
     if (scanner.tryPop('-'))
         return ClassAtom.DASH;
@@ -841,31 +851,31 @@ function parseClassAtom(scanner) {
  *                             | ClassAtomNoDash "-" ClassAtom ClassRanges
  */
 function parseNonemptyClassRangesNoDash(scanner) {
-    parserLog.debug('parsing NonemptyClassRangesNoDash; rest: ' + uneval(scanner.rest));
+    scanner.start('NonemptyClassRangesNoDash');
 
     /* When lookahead is a dash, we're forced to use the ClassAtom expansion. */
     if (scanner.next === '-') {
+        scanner.resolve('NonemptyClassRangesNoDash :: ClassAtom (saw "-")');
         var classAtom = parseClassAtom(scanner);
-        parserLog.debug('parsing NonemptyClassRangesNoDash; got ClassAtom; rest: '
-                        + uneval(scanner.rest));
         return NonemptyClassRangesNoDash.ClassAtom(classAtom);
     }
 
     var cand = parseClassAtomNoDash(scanner);
 
     /* When follow is not a valid character, we're forced to use the ClassAtom expansion. */
-    if (scanner.next === ']')
+    if (scanner.next === ']') {
+        scanner.resolve('NonemptyClassRangesNoDash :: ClassAtom (saw "]")');
         return NonemptyClassRangesNoDash.ClassAtom(ClassAtom.NoDash(cand));
-
-    parserLog.debug('parsing NonemptyClassRangesNoDash; got ClassAtomNoDash; rest: '
-                    + uneval(scanner.rest));
+    }
 
     if (scanner.tryPop('-')) {
+        scanner.resolve('NonemptyClassRangesNoDash :: ClassAtomNoDash "-" ClassAtom ClassRanges');
         return NonemptyClassRangesNoDash.Dashed(cand,
                                                 parseClassAtom(scanner),
                                                 parseClassRanges(scanner));
     }
 
+    scanner.resolve('NonemptyClassRangesNoDash :: ClassAtomNoDash NonemptyClassRangesNoDash');
     return NonemptyClassRangesNoDash.NotDashed(cand,
                                                parseNonemptyClassRangesNoDash(scanner));
 }
@@ -873,21 +883,36 @@ function parseNonemptyClassRangesNoDash(scanner) {
 /*
  * NonemptyClassRanges ::= ClassAtom
  *                       | ClassAtom NonemptyClassRangesNoDash
- *                       | ClassAtom - ClassAtom ClassRanges
+ *                       | ClassAtom "-" ClassAtom ClassRanges
  * @note    The ClassAtom production gets left-factored, so the closing bracket
  *          is part of the FOLLOW set to check for this production to end.
  */
 function parseNonemptyClassRanges(scanner) {
-    parserLog.debug('parsing NonemptyClassRanges; rest: ' + uneval(scanner.rest));
+    scanner.start('NonemptyClassRanges');
     var classAtom = parseClassAtom(scanner);
-    parserLog.debug('parsing NonemptyClassRanges; got ClassAtom; rest: ' + uneval(scanner.rest));
-    if (scanner.next === ']')
+
+    /* 
+     * If there is a dash and a closing bracket after the class atom,
+     * we can't use the dashed production.
+     */
+    if (scanner.hasLookAhead('-', ']')) {
+        scanner.resolve('NonemptyClassRanges :: ClassAtom NonemptyClassRangesNoDash (saw "-" "]")');
+        return NonemptyClassRanges.NotDashed(classAtom, parseNonemptyClassRangesNoDash(scanner));
+    }
+
+    if (scanner.next === ']') {
+        scanner.resolve('NonemptyClassRanges :: ClassAtom (saw "]")');
         return NonemptyClassRanges.NotDashed(classAtom);
+    }
+
     if (scanner.tryPop('-')) {
+        scanner.resolve('NonemptyClassRanges :: ClassAtom "-" ClassAtom ClassRanges');
         return NonemptyClassRanges.Dashed(classAtom,
                                           parseClassAtom(scanner),
                                           parseClassRanges(scanner));
     }
+
+    scanner.resolve('NonemptyClassRanges :: ClassAtom NonemptyClassRangesNoDash');
     return NonemptyClassRanges.NotDashed(classAtom, parseNonemptyClassRangesNoDash(scanner));
 }
 
@@ -896,7 +921,7 @@ function parseNonemptyClassRanges(scanner) {
  *               | ε
  */
 function parseClassRanges(scanner) {
-    parserLog.debug('parsing ClassRanges; rest: ' + uneval(scanner.rest));
+    scanner.start('ClassRanges');
     if (scanner.next === ']')
         return ClassRanges.EMPTY;
     return ClassRanges(parseNonemptyClassRanges(scanner));
@@ -907,11 +932,10 @@ function parseClassRanges(scanner) {
  *                  | [ "^" ClassRanges ]
  */
 function parseCharacterClass(scanner) {
-    parserLog.debug('parsing CharacterClass; rest: ' + uneval(scanner.rest));
+    scanner.start('CharacterClass');
     var inverted = scanner.tryPop('^');
     // Interesting: [^] is a negation of the empty class range (grammatically permitted).
     var classRanges = parseClassRanges(scanner);
-    parserLog.debug('parsing CharacterClass; got ClassRanges; rest: ' + uneval(scanner.rest));
     var result = CharacterClass(classRanges, inverted);
     scanner.popOrSyntaxError(']', 'Missing closing bracket on character class');
     return result;
@@ -926,7 +950,7 @@ function parseCharacterClass(scanner) {
  *        | "(" "?" ":" Disjunction ")"
  */
 function parseAtom(scanner) {
-    parserLog.debug('parsing Atom; rest: ' + uneval(scanner.rest));
+    scanner.start('Atom');
 
     if (scanner.tryPop('['))
         return Atom.CharacterClass(parseCharacterClass(scanner));
@@ -935,17 +959,17 @@ function parseAtom(scanner) {
         return Atom.DOT;
 
     if (scanner.tryPop(BACKSLASH)) {
-        parserLog.debug('Atom :: "\\" AtomEscape');
+        parserLog.info('Atom :: "\\" AtomEscape');
         return Atom.AtomEscape(parseAtomEscape(scanner));
     }
 
     if (scanner.tryPop('(')) {
         var result;
         if (scanner.tryPop('?', ':')) {
-            parserLog.debug('Atom :: "(" "?" ":" Disjunction ")"');
+            parserLog.info('Atom :: "(" "?" ":" Disjunction ")"');
             result = Atom.NonCapturingGroup(parseDisjunction(scanner));
         } else {
-            parserLog.debug('Atom :: "(" Disjunction ")"');
+            parserLog.info('Atom :: "(" Disjunction ")"');
             var number = scanner.nextCapturingNumber();
             result = Atom.CapturingGroup(parseDisjunction(scanner));
             result.capturingNumber = number;
@@ -959,7 +983,7 @@ function parseAtom(scanner) {
     if (PatternCharacter.BAD.has(scanner.next))
         throw scanner.SyntaxError('Bad pattern character');
 
-    parserLog.debug('Atom :: PatternCharacter');
+    parserLog.info('Atom :: PatternCharacter');
     return Atom.PatternCharacter(scanner.pop());
 }
 
@@ -969,7 +993,7 @@ function parseAtom(scanner) {
  *        | Atom Quantifier
  */
 function parseTerm(scanner) {
-    parserLog.debug('parsing Term; rest: ' + uneval(scanner.rest));
+    scanner.start('Term');
     if (!(scanner instanceof Object))
         throw new Error('Bad scanner value: ' + scanner);
     var assertion = parseAssertion(scanner);
@@ -986,14 +1010,14 @@ function parseTerm(scanner) {
  *               | ε
  */
 function parseAlternative(scanner) {
-    parserLog.debug('parsing Alternative; rest: ' + uneval(scanner.rest));
+    scanner.start('Alternative');
     if (!(scanner instanceof Object))
         throw new Error('Bad scanner value: ' + scanner);
     if (scanner.length === 0 || parseAlternative.BAD_START.has(scanner.next)) {
-        parserLog.debug('Alternative :: ε');
+        parserLog.info('Alternative :: ε');
         return Alternative.EMPTY;
     }
-    parserLog.debug('Alternative :: Term Alternative');
+    parserLog.info('Alternative :: Term Alternative');
     var term = parseTerm(scanner);
     scanner.assert(term);
     var alternative = parseAlternative(scanner) || Alternative.EMPTY;
@@ -1019,13 +1043,13 @@ parseAlternative.BAD_START = SetDifference(
  *               | Alternative "|" Disjunction
  */
 function parseDisjunction(scanner) {
-    parserLog.debug('parsing Disjunction; rest: ' + uneval(scanner.rest));
+    parserLog.info('parsing Disjunction; rest: ' + uneval(scanner.rest));
     var lhs = parseAlternative(scanner);
     if (scanner.tryPop('|')) {
-        parserLog.debug('Disjunction :: Alternative "|" Disjunction');
+        parserLog.info('Disjunction :: Alternative "|" Disjunction');
         return Disjunction(lhs, parseDisjunction(scanner));
     }
-    parserLog.debug('Disjunction :: Alternative');
+    parserLog.info('Disjunction :: Alternative');
     return Disjunction(lhs);
 }
 
