@@ -22,9 +22,15 @@ var Unicode = (function() {
         if (singletonCategorySet)
             return singletonCategorySet;
 
-        var memberStr = LZW.decompress(LZW.decode(encLZWIdentityEscape));
         singletonCategorySet = {
-            has: function(c) { return memberStr.indexOf(c) !== -1; }
+            has: function(c) {
+                if (c.length !== 1)
+                    throw new Error("Bad character value: " + c);
+                var cc = c.charCodeAt(0);
+                var index = cc / 16;
+                var bit = cc % 16;
+                return !!(encIdentityEscape[index] & (1 << bit));
+            }
         };
         return singletonCategorySet;
     }
