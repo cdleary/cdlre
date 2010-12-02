@@ -144,8 +144,10 @@ function testCDLRE() {
     var failCount = 0;
     function check(pattern, input, flags) {
         function fail() {
-            print("FAIL:     pattern: " + uneval(pattern) + "; input: " + uneval(input)
-                  + "; flags: " + uneval(flags));
+            print("FAIL:"
+                  + "\n\tpattern: " + uneval(pattern)
+                  + "\n\tflags:   " + uneval(flags)
+                  + "\n\tinput:   " + uneval(input));
             failCount += 1;
         }
         try {
@@ -323,6 +325,9 @@ function testCDLRE() {
         //[')', "test(); woo"], FIXME should be syntax error
         //[/x\d\dy/, "abcx45ysss235"], FIXME digit atom escape
         [/[^abc]def[abc]+/, "abxdefbb"],
+    ];
+    var tests = [
+        [/^(\"(.)*?\"|[:{}true])+?$/, "{\"guidePro\":{\"ok\":true}}"]
     ];
     var extractFlags = function(re) {
         var flags = [(re.ignoreCase ? 'i' : ''),

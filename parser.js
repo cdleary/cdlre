@@ -162,6 +162,14 @@ function Scanner(pattern) {
     return self;
 }
 
+function ValueNode(nodeType, value) {
+    return {
+        nodeType: nodeType,
+        value: value,
+        toString: function() { return this.nodeType + '(' + value + ')'; }
+    };
+}
+
 var Assertion = (function() {
     var kinds = Set('BeginningOfLine', 'EndOfLine', 'WordBoundary', 'NotWordBoundary',
                     'ZeroWidthPositive', 'ZeroWidthNegative');
@@ -298,12 +306,9 @@ var AtomEscape = (function() {
         };
     }
 
+    var IdentityEscape = ValueNode.bind(null, 'IdentityEscape');
     CharacterEscape.IdentityEscape = function(c) {
-        return CharacterEscape('IdentityEscape', {
-            nodeType: 'IdentityEscape',
-            value: c,
-            toString: function() { return this.nodeType + '(' + this.value + ')'; }
-        });
+        return CharacterEscape('IdentityEscape', IdentityEscape(c));
     };
 
     function AtomEscape(decimalEscape, characterEscape, characterClassEscape) {
@@ -320,6 +325,8 @@ var AtomEscape = (function() {
             },
         };
     }
+
+    var DecimalEscape = ValueNode.bind(null, 'DecimalEscape');
 
     return {
         CharacterClassEscape: {
@@ -349,8 +356,11 @@ var AtomEscape = (function() {
             },
             IdentityEscape: function(c) {
                 return AtomEscape(undefined, CharacterEscape.IdentityEscape(c), undefined);
-            }
+            },
         },
+        DecimalEscape: function(value) {
+            return AtomEscape(DecimalEscape(value));
+        }
     };
 })();
 
@@ -1191,6 +1201,8 @@ function makeTestCases() {
                 [/[a-c]/, PatDis(CCRAlt('a', 'c'))],
                 [/[^a-d]/, PatDis(CCRAlt('a', 'd', true))],
                 [/[^ab]/, PatDis(CCAlt(['a', 'b'], true))],
+                // Backreferences
+                //[/\1/, PatDis(
 
                 // Tricky
                 [/[^]/, PatDis(CCAlt([], true))],
