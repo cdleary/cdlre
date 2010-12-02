@@ -325,9 +325,16 @@ function testCDLRE() {
         //[')', "test(); woo"], FIXME should be syntax error
         //[/x\d\dy/, "abcx45ysss235"], FIXME digit atom escape
         [/[^abc]def[abc]+/, "abxdefbb"],
-    ];
-    var tests = [
-        [/^(\"(.)*?\"|[:{}true])+?$/, "{\"guidePro\":{\"ok\":true}}"]
+
+        [/^(\"(.)*?\"|[:{}true])+?$/, "{\"guidePro\":{\"ok\":true}}"],
+
+        /* ECMA 15.10.2.5 Note 3 FIXME: which revision? */
+        [/(z)((a+)?(b+)?(c))*/, "zaacbbbcac"],
+
+        /* Bug 613820. */
+        //[/(?:^(a)|\1(a)|(ab)){2}/, "aab"],
+
+        /* FIXME: also permit a object literal that has an expected value. */
     ];
     var extractFlags = function(re) {
         var flags = [(re.ignoreCase ? 'i' : ''),
