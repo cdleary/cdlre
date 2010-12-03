@@ -7,22 +7,6 @@
  *          with that.
  */
 
-if (typeof uneval === 'undefined') {
-    /* 
-     * FIXME:   Care about this more when it actually runs in more than
-     *          one browser...
-     */
-    uneval = function(obj) {
-        switch (typeof obj) {
-          case 'string': return '"' + obj + '"';
-          case 'number': return obj.toString();
-          case 'boolean': return obj.toString();
-          case 'undefined': return 'undefined';
-        }
-        throw new Error("NYI: " + typeof obj);
-    };
-}
-
 var BACKSLASH = '\\';
 var ZWNJ = '\u200c'; /* Zero width non-joiner. */
 var ZWJ = '\u200d'; /* Zero-width joiner; FIXME: spec has wrong value. */
@@ -65,8 +49,11 @@ function Scanner(pattern) {
         resolve: function(resolution) {
             parserLog.info('RPROD: ' + resolution + ' @ ' + uneval(self.rest));
         },
+
+        /* Warning: these use 1-based indexing. */
         nextCapturingNumber: function() { return ++nCapturingParens; },
         capturingParenCount: function() { return nCapturingParens; },
+
         tryPop: function() {
             if (this.hasLookAhead.apply(this, arguments)) {
                 index += arguments.length;
@@ -1008,7 +995,7 @@ function parseTerm(scanner) {
     var quantifier = parseQuantifier(scanner);
     var term = Term.wrapAtom(atom, quantifier);
     var parenCountAfter = scanner.capturingParenCount();
-    term.parenIndex = parenCountBefore;
+    term.parenIndex = parenCountBefore + 1; /* 1-based indexing. */
     term.parenCount = parenCountAfter - parenCountBefore;
     assert(term.parenCount !== undefined);
     return term;
@@ -1068,7 +1055,9 @@ function parse(scanner) {
     var dis = parseDisjunction(scanner);
     if (scanner.length !== 0)
         throw new scanner.SyntaxError("Cruft at end of pattern");
-    return Pattern(dis);
+    var pattern = Pattern(dis);
+    pattern.nCapturingParens = scanner.capturingParenCount();
+    return pattern;
 }
 
 function makeAST(pattern) { return parse(Scanner(pattern)); }

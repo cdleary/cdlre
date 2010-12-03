@@ -27,6 +27,7 @@ function GuestBuiltins() {
         var P = pattern === undefined ? '' : ToString(pattern);
         var F = flags === undefined ? '' : ToString(flags);
         var ast = makeAST(P); // throws SyntaxError, per spec.
+        assert(ast !== undefined);
         /* 
          * If F contains an unknown character or the same character
          * more than once, throw a syntax error.
@@ -116,25 +117,43 @@ function GuestBuiltins() {
     };
 }
 
-function checkMatchResults(host, guest) {
-    if ((host === null) !== (guest === null)) {
-        print("MISMATCH: host: " + uneval(host) + "; guest: " + uneval(guest));
+function matchToString(match) {
+    var pieces = ['{'];
+    'index input length'.split(' ').forEach(function(attr) {
+        pieces.push(attr + ': ' + match[attr], ', ');
+    });
+    pieces.push('[')
+    for (var i = 0; i < match.length; ++i)
+        pieces.push(uneval(match[i]), ', ');
+    pieces.pop();
+    pieces.push(']}');
+    return pieces.join('');
+}
+
+function checkMatchResults(targetName, target, guest) {
+    if ((target === null) !== (guest === null)) {
+        print("MISMATCH: " + targetName + ": " + uneval(target) + "; guest: " + uneval(guest));
         return false;
     }
     var ok = true;
-    if ((host === null) && (guest === null))
+    if ((target === null) && (guest === null))
         return ok;
     var check = function(attr) {
-        var hostValue = host[attr];
+        var targetValue = target[attr];
         var guestValue = guest[attr];
-        if (hostValue !== guestValue) {
+        if (targetValue !== guestValue) {
             ok = false;
-            print('MISMATCH: key: ' + attr + '; host: ' + uneval(hostValue)
-                  + '; guest: ' + uneval(guestValue));
+            print('MISMATCH:'
+                + '\n\tkey: ' + attr
+                + '\n\t\t' + targetName + ': ' + uneval(targetValue)
+                + '\n\t\tguest: ' + uneval(guestValue)
+                + '\n\tmatch:'
+                + '\n\t\t' + targetName + ': ' + matchToString(target)
+                + '\n\t\tguest: ' + matchToString(guest));
         }
     };
-    'index input length'.split().forEach(check);
-    for (var i = 0; i < host.length; ++i)
+    'length'.split(' ').forEach(check); /* FIXME: add index and input. */
+    for (var i = 0; i < target.length; ++i)
         check(i);
     return ok;
 }
@@ -142,36 +161,77 @@ function checkMatchResults(host, guest) {
 function testCDLRE() {
     var guestBuiltins = GuestBuiltins();
     var failCount = 0;
-    function check(pattern, input, flags) {
-        function fail() {
-            print("FAIL:"
-                  + "\n\tpattern: " + uneval(pattern)
-                  + "\n\tflags:   " + uneval(flags)
-                  + "\n\tliteral: " + uneval(new RegExp(pattern, flags))
-                  + "\n\tinput:   " + uneval(input));
-            failCount += 1;
-        }
+
+    function checkFlags(flags) {
+        assert(flags !== undefined ? flags.match(/^[igym]{0,4}$/) : true, flags);
+    }
+
+    function fail(pattern, flags, input) {
+        checkFlags(flags);
+        print("FAIL:"
+              + "\n\tliteral: " + uneval(new RegExp(pattern, flags))
+              + "\n\tpattern: " + uneval(pattern)
+              + "\n\tflags:   " + uneval(flags)
+              + "\n\tinput:   " + uneval(input)
+              + "\n");
+        failCount += 1;
+    }
+
+    function compileAndExecGuest(pattern, flags, input) {
+        checkFlags(flags);
         try {
             var guestRE = new guestBuiltins.RegExp(pattern, flags);
             var guestResult = guestRE.exec(input);
         } catch (e) {
             print("CAUGHT: " + e);
             print("STACK:  " + e.stack);
-            fail();
+            fail(pattern, flags, input);
             return;
         }
+        assert(guestResult !== undefined);
+        return guestResult;
+    }
+
+    function compileAndExecHost(pattern, flags, input) {
+        checkFlags(flags);
         try {
             var hostRE = new RegExp(pattern, flags);
         } catch (e) {
             print("CAUGHT: " + e);
-            print("Guest was ok, though; result: " + uneval(guestResult));
-            fail();
+            print("STACK:  " + e.stack);
+            fail(pattern, flags, input);
             return;
         }
         var hostResult = hostRE.exec(input);
-        if (!checkMatchResults(hostResult, guestResult))
-            fail();
+        return hostResult;
     }
+
+    /**
+     * Check that the regexp given by pattern/flags execs, given input, to the
+     * same thing as the host platform.
+     */
+    function checkAgainstHost(pattern, flags, input) {
+        checkFlags(flags);
+        var guestResult = compileAndExecGuest(pattern, flags, input);
+        if (guestResult === undefined) /* Failure. */
+            return;
+        var hostResult = compileAndExecHost(pattern, flags, input);
+
+        /* Compare guest and host. */
+        if (!checkMatchResults('host', hostResult, guestResult))
+            fail(pattern, flags, input);
+    }
+
+    function checkAgainstResult(pattern, flags, input, result) {
+        checkFlags(flags);
+        var guestResult = compileAndExecGuest(pattern, flags, input);
+        if (guestResult === undefined) /* Failure. */
+            return;
+
+        if (!checkMatchResults('known', result, guestResult))
+            fail(pattern, flags, input);
+    }
+
     var disabledTests = [
         // TODO: use digits in quantifier range that overflow the 32/64b space.
         // Backreferences.
@@ -180,7 +240,18 @@ function testCDLRE() {
         [/(a*)b\1/, "cccdaaabqxaabaayy"],
         // FIXME: interesting spec discrepancy about valididty of RegExp(']') versus /]/
     ];
+
     var tests = [
+        /* 15.10.2.5 Term Note 2 */
+        {re: /a[a-z]{2,4}/, op: 'exec', str: 'abcdefghi', result: ['abcde']},
+        {re: /a[a-z]{2,4}?/, op: 'exec', str: 'abcdefghi', result: ['abc']},
+        {re: /(aa|aabaac|ba|b|c)*/, op: 'exec', str: 'aabaac', result: ['aaba', 'ba']},
+        //"aaaaaaaaaa,aaaaaaaaaaaaaaa".replace(/^(a+)\1*,\1+$/,"$1")
+
+        /* 15.10.2.5 Term Note 3 */
+        {re: /(z)((a+)?(b+)?(c))*/, op: 'exec', str: 'zaacbbbcac',
+         result: ["zaacbbbcac", "z", "ac", "a", undefined, "c"]},
+
         [/.+/, "...."],
         [/[^]/, "/"],
         [/[^]/, ""],
@@ -337,6 +408,11 @@ function testCDLRE() {
 
         /* FIXME: also permit a object literal that has an expected value. */
     ];
+
+    /**
+     * Produce a flags string or undefined, corresponding to the flags set on
+     * |re|.
+     */
     var extractFlags = function(re) {
         var flags = [(re.ignoreCase ? 'i' : ''),
                      (re.multiline ? 'm' : ''),
@@ -344,19 +420,36 @@ function testCDLRE() {
                      (re.global ? 'g' : '')].join('');
         return flags.length === 0 ? undefined : flags;
     }
+
     for (var i = 0; i < tests.length; ++i) {
         var test = tests[i];
-        var pattern, flags;
-        if (typeof test[0] === 'string') {
+        var pattern, flags, input, result, checker;
+        if (typeof test === 'object' && test.re !== undefined) {
+            input = test.str;
+            pattern = test.re.source;
+            flags = extractFlags(test.re);
+            result = test.result;
+            checker = checkAgainstResult;
+        } else if (typeof test[0] === 'string') {
+            input = test[1];
             pattern = test[0];
             flags = '';
+            checker = checkAgainstHost;
         } else {
+            input = test[1];
             pattern = test[0].source;
             flags = extractFlags(test[0]);
+            checker = checkAgainstHost;
         }
-        var input = test[1];
-        check(pattern, input, flags);
+
+        try {
+            checker(pattern, flags, input, result);
+        } catch (e) {
+            print(e.stack);
+            throw e;
+        }
     }
+
     if (failCount)
         print("FAILED " + failCount + "/" + tests.length);
     else

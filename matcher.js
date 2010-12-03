@@ -13,14 +13,8 @@ function spec(msg) {}
 function IdentityContinuation(state) { return state; }
 function identity(x) { return x; }
 
-function State(endIndex, captures) {
-    return {
-        endIndex: endIndex,
-        captures: captures
-    };
-}
-
 function ProcedureBuilder(ast, multiline, ignoreCase, input, index) {
+    assert(ast !== undefined);
     this.ast = ast;
     this.multiline = multiline;
     this.ignoreCase = ignoreCase;
@@ -28,10 +22,32 @@ function ProcedureBuilder(ast, multiline, ignoreCase, input, index) {
     this.inputLength = input.length;
     this.index = index;
     this.nCapturingParens = ast.nCapturingParens;
+    assert(this.nCapturingParens !== undefined);
     this.clog = new Logger('ProcedureBuilder@CompileTime');
     this.rlog = new Logger('ProcedureBuilder@RunTime');
     this.spec = new Logger('ProcedureBuilder@Spec');
 }
+
+/* The parenIndex is 1-based. */
+ProcedureBuilder.prototype.checkParenIndex = function(parenIndex) {
+    assert(parenIndex !== undefined);
+    assert(1 <= parenIndex && parenIndex <= this.nCapturingParens, parenIndex);
+};
+
+ProcedureBuilder.prototype.checkCaptures = function(captures) {
+    /* Array length assumes 0-indexing. */
+    assert(captures.length === this.nCapturingParens + 1,
+           captures.length + ' !== ' + (this.nCapturingParens + 1));
+    assert(typeof captures[0] === 'undefined');
+};
+
+ProcedureBuilder.prototype.State = function(endIndex, captures) {
+    this.checkCaptures(captures);
+    return {
+        endIndex: endIndex,
+        captures: captures
+    };
+};
 
 ProcedureBuilder.prototype.CharSet = function() {
     var self = this;
@@ -62,8 +78,14 @@ ProcedureBuilder.prototype.evalPattern = function() {
     this.clog.debug("evaluating pattern");
     var m = this.evalDisjunction(this.ast.disjunction);
     var c = IdentityContinuation;
-    var cap = new Array(this.nCapturingParens);
-    var x = State(this.index, cap);
+
+    /* State captures use 1-based indexing. */
+    var cap = [];
+    for (var i = 0; i <= this.nCapturingParens; ++i)
+        cap[i] = undefined;
+    this.checkCaptures(cap);
+    var x = this.State(this.index, cap);
+
     return m(x, c);
 };
 
@@ -152,16 +174,23 @@ ProcedureBuilder.prototype.repeatMatcher = function(m, min, max, greedy, x, c,
     spec('15.10.2.5 RepeatMatcher 3');
     var cap = x.captures.map(identity);
     spec('15.10.2.5 RepeatMatcher 4');
-    self.rlog.info('parenIndex: ' + parenIndex + '; parenCount: ' + parenCount);
-    for (var k = parenIndex; k <= parenIndex + parenCount; ++k)
+    self.rlog.debug('clearing parens [' + parenIndex + ', ' + (parenIndex + parenCount) + ')');
+    if (parenCount)
+        self.checkParenIndex(parenIndex);
+    for (var k = parenIndex; k < parenIndex + parenCount; ++k)
         cap[k] = undefined;
+    self.checkCaptures(cap);
+
     spec('15.10.2.5 RepeatMatcher 5');
     var e = x.endIndex;
+
     spec('15.10.2.5 RepeatMatcher 6');
-    var xr = State(e, cap);
+    var xr = self.State(e, cap);
+
     spec('15.10.2.5 RepeatMatcher 7');
     if (min !== 0)
         return m(xr, d);
+
     spec('15.10.2.5 RepeatMatcher 8');
     if (!greedy) {
         var z = c(x);
@@ -169,11 +198,14 @@ ProcedureBuilder.prototype.repeatMatcher = function(m, min, max, greedy, x, c,
             return z;
         return m(xr, d);
     }
+
     spec('15.10.2.5 RepeatMatcher 9');
     var z = m(xr, d);
+
     spec('15.10.2.5 RepeatMatcher 10');
     if (z !== MatchResult.FAILURE)
         return z;
+
     spec('15.10.2.5 RepeatMatcher 11');
     return c(x);
 }
@@ -285,7 +317,8 @@ ProcedureBuilder.prototype.evalNonemptyClassRangesNoDash = function(necrnd) {
         var C = this.evalClassRanges(necrnd.value[1]);
         var D = this.CharacterRange(A, B);
         return this.CharSetUnion(D, C);
-      default: throw new Error("Unreachable: " + necrnd.kind);
+      default:
+        throw new Error("Unreachable: " + necrnd.kind);
     }
 
 };
@@ -355,6 +388,7 @@ ProcedureBuilder.prototype.evalAtom = function(atom) {
       case 'CapturingGroup':
         var m = self.evalDisjunction(atom.value);
         var parenIndex = atom.capturingNumber;
+        self.checkParenIndex(parenIndex);
         return function matcher(x, c) {
             var d = function(y) {
                 self.rlog.info('executing capture group continuation');
@@ -365,7 +399,7 @@ ProcedureBuilder.prototype.evalAtom = function(atom) {
                 self.rlog.debug('end state endIndex:   ' + ye);
                 var s = self.input.substr(xe, ye - xe);
                 cap[parenIndex] = s;
-                var z = State(ye, cap);
+                var z = self.State(ye, cap);
                 //self.rlog.info("executing capture group's subsequent continuation: " + c);
                 return c(z);
             };
@@ -405,7 +439,7 @@ ProcedureBuilder.prototype.CharacterSetMatcher = function(charSet, invert) {
         if (charSet.hasCanonicalized(chc) === invert)
             return MatchResult.FAILURE;
         var cap = x.captures;
-        var y = State(e + 1, cap);
+        var y = self.State(e + 1, cap);
         return c(y);
     };
 };
