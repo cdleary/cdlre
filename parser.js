@@ -1069,12 +1069,11 @@ function makeAST(pattern) { return parse(Scanner(pattern)); }
 var TestConstructors = {
     Dis: Disjunction,
     Alt: Alternative,
+    /** Create a pattern that wraps a disjunction with the given arguments. */
     PatDis: function() {
         return Pattern(Disjunction.apply(null, arguments));
     },
-    /**
-     * Create a capturing group alternative that wraps |dis|.
-     */
+    /** Create a capturing group alternative that wraps |dis|. */
     CGAlt: function(dis, nextAlt) {
         return Alternative(Term.wrapAtom(Atom.CapturingGroup(dis)), nextAlt);
     },
@@ -1104,6 +1103,7 @@ var TestConstructors = {
             nextAlt
         );
     },
+    /** Assertion alternatives. */
     AssAlt: {
         BOL: Alternative(Term.wrapAssertion(Assertion.BOL)),
         BOLConcat: function(nextAlt) {
@@ -1131,9 +1131,11 @@ var TestConstructors = {
             )
         )));
     },
+    /** Non-capturing group alternative. */
     NCGAlt: function(dis, nextAlt) {
         return Alternative(Term.wrapAtom(Atom.NonCapturingGroup(dis)), nextAlt);
     },
+    /** Character-class alternative (like [a-z]). */
     CCAlt: function(chars, inverted) {
         var CASC = function(c) { return ClassAtom.NoDash(ClassAtomNoDash.SourceCharacter(c)); };
         if (chars.length === 0)
@@ -1151,6 +1153,7 @@ var TestConstructors = {
             CharacterClass(ClassRanges(necr), inverted)
         )));
     },
+    /** Character-class escape alternative (like \d). */
     CCEAlt: {
         WORD: Alternative(Term.wrapAtom(Atom.CharacterClassEscape.WORD)),
     },

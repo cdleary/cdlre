@@ -168,11 +168,14 @@ function testCDLRE() {
 
     function fail(pattern, flags, input) {
         checkFlags(flags);
+        var literal = uneval(new RegExp(pattern, flags));
+        var input = uneval(input);
         print("FAIL:"
-              + "\n\tliteral: " + uneval(new RegExp(pattern, flags))
+              + "\n\tliteral: " + literal
               + "\n\tpattern: " + uneval(pattern)
               + "\n\tflags:   " + uneval(flags)
-              + "\n\tinput:   " + uneval(input)
+              + "\n\tinput:   " + input
+              + "\n\tcode:    " + literal + '.exec(' + input + ')'
               + "\n");
         failCount += 1;
     }
@@ -401,9 +404,9 @@ function testCDLRE() {
         [/^(\"(.)*?\"|[:{}true])+?$/, "{\"guidePro\":{\"ok\":true}}"],
 
         /* ECMA 15.10.2.5 Note 3 FIXME: which revision? */
-        //[/(z)((a+)?(b+)?(c))*/, "zaacbbbcac"],
+        [/(z)((a+)?(b+)?(c))*/, "zaacbbbcac"],
 
-        /* Bug 613820. */
+        /* From bug 613820. FIXME: backref */
         //[/(?:^(a)|\1(a)|(ab)){2}/, "aab"],
 
         /* FIXME: also permit a object literal that has an expected value. */
