@@ -147,13 +147,6 @@ function Scanner(pattern) {
         SyntaxError: function(msg) {
             return new SyntaxError(msg + "; rest: " + uneval(self.rest));
         },
-        assert: function(cond, msg) {
-            if (cond)
-                return;
-            if (msg)
-                log.error(msg);
-            throw new Error("Assertion failure" + (msg ? ": " + msg : ''));
-        },
     };
 
     Object.defineProperty(self, 'next', {get: function() { return pattern[index]; }});
@@ -672,14 +665,14 @@ function parseAssertion(scanner) {
     /* Assertion groups. */
     if (scanner.tryPop('(', '?', '=')) {
         var dis = parseDisjunction(scanner);
-        scanner.assert(dis);
+        assert(dis);
         scanner.popOrSyntaxError(')', 'Expected closing paren at end of assertion group');
         return Assertion.ZeroWidthPositive(dis);
     }
 
     if (scanner.tryPop('(', '?', '!')) {
         var dis = parseDisjunction(scanner);
-        scanner.assert(dis);
+        assert(dis);
         scanner.popOrSyntaxError(')', 'Expected closing paren at end of assertion group');
         return Assertion.ZeroWidthNegative(dis);
     }
@@ -718,7 +711,7 @@ function parseQuantifier(scanner) {
             return Quantifier.LowerBound(scanner.tryPop('?'), firstDigits);
 
         var secondDigits = scanner.popDecimalDigits();
-        scanner.assert(secondDigits !== undefined);
+        assert(secondDigits !== undefined);
         scanner.popOrSyntaxError('}', 'Missing closing brace on ranged quantifier');
         var result = Quantifier.Range(scanner.tryPop('?'), [firstDigits, secondDigits]);
         return result;
@@ -1009,10 +1002,16 @@ function parseTerm(scanner) {
     var assertion = parseAssertion(scanner);
     if (assertion)
         return Term.wrapAssertion(assertion);
+    var parenCountBefore = scanner.capturingParenCount();
     var atom = parseAtom(scanner);
-    scanner.assert(atom);
+    assert(atom);
     var quantifier = parseQuantifier(scanner);
-    return Term.wrapAtom(atom, quantifier);
+    var term = Term.wrapAtom(atom, quantifier);
+    var parenCountAfter = scanner.capturingParenCount();
+    term.parenIndex = parenCountBefore;
+    term.parenCount = parenCountAfter - parenCountBefore;
+    assert(term.parenCount !== undefined);
+    return term;
 }
 
 /**
@@ -1029,7 +1028,7 @@ function parseAlternative(scanner) {
     }
     parserLog.info('Alternative :: Term Alternative');
     var term = parseTerm(scanner);
-    scanner.assert(term);
+    assert(term);
     var alternative = parseAlternative(scanner) || Alternative.EMPTY;
     return Alternative(term, alternative);
 }

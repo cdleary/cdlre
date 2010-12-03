@@ -1,4 +1,9 @@
-var LogLevel = {
+function Logger(name, level) {
+    this.name = name;
+    this.logLevel = level === undefined ? Logger.defaultLevel : level;
+}
+
+Logger.levels = {
     ALL: 100,
     TRACE: 40,
     DEBUG: 30,
@@ -7,12 +12,8 @@ var LogLevel = {
     NONE: -1,
 };
 
-var LOG_LEVEL = LogLevel.NONE;
-
-function Logger(name) {
-    this.name = name;
-}
-
+Logger.defaultLevel = Logger.levels.NONE;
+ 
 function Arrayify(args) {
     var accum = [];
     for (var i = 0; i < args.length; ++i)
@@ -21,9 +22,10 @@ function Arrayify(args) {
 };
 
 (function createLogFunctions() {
-    for (var level in LogLevel) {
-        if (!LogLevel.hasOwnProperty(level) || level == 'ALL')
+    for (var level in Logger.levels) {
+        if (!Logger.levels.hasOwnProperty(level) || level == 'ALL')
             continue;
+
         /* 
          * This function is necessary for block-like scoping.
          * (Because ECMA doesn't have a way to create a binding
@@ -31,7 +33,7 @@ function Arrayify(args) {
          */
         (function createLogFunction(level) {
             Logger.prototype[level.toLowerCase()] = function() {
-                if (LOG_LEVEL >= LogLevel[level])
+                if (this.logLevel >= Logger.levels[level])
                     print(this.name + ": " + level.toUpperCase() + ": "
                           + Arrayify(arguments).join(' '));
             };

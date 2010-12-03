@@ -147,6 +147,7 @@ function testCDLRE() {
             print("FAIL:"
                   + "\n\tpattern: " + uneval(pattern)
                   + "\n\tflags:   " + uneval(flags)
+                  + "\n\tliteral: " + uneval(new RegExp(pattern, flags))
                   + "\n\tinput:   " + uneval(input));
             failCount += 1;
         }
@@ -329,7 +330,7 @@ function testCDLRE() {
         [/^(\"(.)*?\"|[:{}true])+?$/, "{\"guidePro\":{\"ok\":true}}"],
 
         /* ECMA 15.10.2.5 Note 3 FIXME: which revision? */
-        [/(z)((a+)?(b+)?(c))*/, "zaacbbbcac"],
+        //[/(z)((a+)?(b+)?(c))*/, "zaacbbbcac"],
 
         /* Bug 613820. */
         //[/(?:^(a)|\1(a)|(ab)){2}/, "aab"],

@@ -8,6 +8,8 @@
 var MatchResult = {FAILURE: "failure"};
 var LINE_TERMINATOR = Set('\n', '\r', '\u2028', '\u2029');
 
+function spec(msg) {}
+
 function IdentityContinuation(state) { return state; }
 function identity(x) { return x; }
 
@@ -28,6 +30,7 @@ function ProcedureBuilder(ast, multiline, ignoreCase, input, index) {
     this.nCapturingParens = ast.nCapturingParens;
     this.clog = new Logger('ProcedureBuilder@CompileTime');
     this.rlog = new Logger('ProcedureBuilder@RunTime');
+    this.spec = new Logger('ProcedureBuilder@Spec');
 }
 
 ProcedureBuilder.prototype.CharSet = function() {
@@ -131,31 +134,47 @@ ProcedureBuilder.prototype.evalQuantifier = function(quant) {
 ProcedureBuilder.prototype.repeatMatcher = function(m, min, max, greedy, x, c,
                                                     parenIndex, parenCount) {
     var self = this;
+    var spec = self.spec.debug;
+    spec('15.10.2.5 RepeatMatcher 1');
     if (max === 0)
         return c(x);
     var d = function(y) {
+        spec('15.10.2.5 RepeatMatcher 2.1');
         if (min === 0 && y.endIndex === x.endIndex)
             return MatchResult.FAILURE;
+        spec('15.10.2.5 RepeatMatcher 2.2');
         var min2 = min === 0 ? 0 : min - 1;
+        spec('15.10.2.5 RepeatMatcher 2.3');
         var max2 = max === Infinity ? Infinity : max - 1;
+        spec('15.10.2.5 RepeatMatcher 2.4');
         return self.repeatMatcher(m, min2, max2, greedy, y, c, parenIndex, parenCount);
     };
+    spec('15.10.2.5 RepeatMatcher 3');
     var cap = x.captures.map(identity);
-    for (var k = parenIndex; parenIndex <= parenIndex + parenCount; ++k)
+    spec('15.10.2.5 RepeatMatcher 4');
+    self.rlog.info('parenIndex: ' + parenIndex + '; parenCount: ' + parenCount);
+    for (var k = parenIndex; k <= parenIndex + parenCount; ++k)
         cap[k] = undefined;
+    spec('15.10.2.5 RepeatMatcher 5');
     var e = x.endIndex;
+    spec('15.10.2.5 RepeatMatcher 6');
     var xr = State(e, cap);
+    spec('15.10.2.5 RepeatMatcher 7');
     if (min !== 0)
         return m(xr, d);
+    spec('15.10.2.5 RepeatMatcher 8');
     if (!greedy) {
         var z = c(x);
         if (z !== MatchResult.FAILURE)
             return z;
         return m(xr, d);
     }
+    spec('15.10.2.5 RepeatMatcher 9');
     var z = m(xr, d);
+    spec('15.10.2.5 RepeatMatcher 10');
     if (z !== MatchResult.FAILURE)
         return z;
+    spec('15.10.2.5 RepeatMatcher 11');
     return c(x);
 }
 
@@ -194,7 +213,9 @@ ProcedureBuilder.prototype.evalTerm = function(term) {
         var bounds = self.evalQuantifier(term.quantifier);
         var min = bounds.min, max = bounds.max, greedy = bounds.greedy;
         var parenIndex = term.parenIndex;
-        var parenCount = term.atom.parenCount;
+        var parenCount = term.parenCount;
+        assert(parenIndex !== undefined, new String(parenIndex));
+        assert(parenCount !== undefined, new String(parenCount));
         return function matcher(x, c) {
             return self.repeatMatcher(m, min, max, greedy, x, c, parenIndex, parenCount);
         };
@@ -345,7 +366,7 @@ ProcedureBuilder.prototype.evalAtom = function(atom) {
                 var s = self.input.substr(xe, ye - xe);
                 cap[parenIndex] = s;
                 var z = State(ye, cap);
-                self.rlog.info("executing capture group's subsequent continuation: " + c);
+                //self.rlog.info("executing capture group's subsequent continuation: " + c);
                 return c(z);
             };
             return m(x, d);
