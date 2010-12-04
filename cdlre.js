@@ -135,27 +135,33 @@ function checkMatchResults(targetName, target, guest) {
         pfmt("MISMATCH: {}: {}; guest: {}", targetName, uneval(target), uneval(guest));
         return false;
     }
-    var ok = true;
     if ((target === null) && (guest === null))
-        return ok;
+        return true;
     var check = function(attr) {
         var targetValue = target[attr];
         var guestValue = guest[attr];
-        if (targetValue !== guestValue) {
-            ok = false;
-            print('MISMATCH:'
-                + '\n\tkey: ' + attr
-                + '\n\t\t' + targetName + ': ' + uneval(targetValue)
-                + '\n\t\tguest: ' + uneval(guestValue)
-                + '\n\tmatch:'
-                + '\n\t\t' + targetName + ': ' + matchToString(target)
-                + '\n\t\tguest: ' + matchToString(guest));
-        }
+        if (targetValue === guestValue)
+            return true;
+        print('MISMATCH:'
+            + '\n\tkey: ' + attr
+            + '\n\t\t' + targetName + ': ' + uneval(targetValue)
+            + '\n\t\tguest: ' + uneval(guestValue)
+            + '\n\tmatch:'
+            + '\n\t\t' + targetName + ': ' + matchToString(target)
+            + '\n\t\tguest: ' + matchToString(guest));
+        return false;
     };
-    'length'.split(' ').forEach(check); /* FIXME: add index and input. */
-    for (var i = 0; i < target.length; ++i)
-        check(i);
-    return ok;
+    for (var i = 0; i < target.length; ++i) {
+        if (!check(i))
+            return false;
+    }
+    var attrs = ['length', /* FIXME 'index', 'input' */];
+    for (var i = 0; i < attrs.length; ++i) {
+        var attr = attrs[i];
+        if (!check(attr))
+            return false;
+    }
+    return true;
 }
 
 function testCDLRE() {
@@ -407,7 +413,7 @@ function testCDLRE() {
         [/(z)((a+)?(b+)?(c))*/, "zaacbbbcac"],
 
         /* From bug 613820. FIXME: backref */
-        //[/(?:^(a)|\1(a)|(ab)){2}/, "aab"],
+        [/(?:^(a)|\1(a)|(ab)){2}/, "aab"],
 
         /* FIXME: also permit a object literal that has an expected value. */
     ];

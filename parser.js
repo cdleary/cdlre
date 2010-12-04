@@ -21,13 +21,15 @@ function Scanner(pattern) {
     var cc9 = ord('9');
     var nCapturingParens = 0;
 
-    var isDigit = function(c) {
+    function isDigit(c) {
+        if (c === undefined)
+            return false;
         var ccc = ord(c);
         return cc0 <= ccc && ccc <= cc9;
     };
 
     /** Convert a digit character to its numerical form. */
-    var toDigit = function(c) {
+    function toDigit(c) {
         var ccc = ord(c);
         if (cc0 <= ccc && ccc <= cc9)
             return ccc - cc0;
@@ -80,7 +82,7 @@ function Scanner(pattern) {
             return pattern[index++];
         },
         /** Note: assumes that a digit may not be the lookahead. */
-        popDecimalIntegerLiteral: function() {
+        popDecimalIntegerLiteral: function popDecimalIntegerLiteral() {
             if (!isDigit(pattern[index]))
                 return;
             if (pattern[index] === '0' && isDigit(pattern[index + 1]))
@@ -134,11 +136,14 @@ function Scanner(pattern) {
     return self;
 }
 
+/**
+ * A value node is an abstract base class that has a node type and wraps a value.
+ */
 function ValueNode(nodeType, value) {
     return {
         nodeType: nodeType,
         value: value,
-        toString: function() { return this.nodeType + '(' + value + ')'; }
+        toString: function() { return fmt('{}({!r})', this.nodeType, this.value); }
     };
 }
 
@@ -331,6 +336,7 @@ var AtomEscape = (function() {
             },
         },
         DecimalEscape: function(value) {
+            assert(typeof value === 'number', typeof value);
             return AtomEscape(DecimalEscape(value));
         }
     };
@@ -1145,6 +1151,9 @@ var TestConstructors = {
             CharacterClass(ClassRanges(necr), inverted)
         )));
     },
+    BRAlt: function BRAlt(num) {
+        return Alternative(Term.wrapAtom(Atom.AtomEscape(AtomEscape.DecimalEscape(num))));
+    },
     /** Character-class escape alternative (like \d). */
     CCEAlt: {
         WORD: Alternative(Term.wrapAtom(Atom.CharacterClassEscape.WORD)),
@@ -1185,7 +1194,7 @@ function makeTestCases() {
                 [/[^a-d]/, PatDis(CCRAlt('a', 'd', true))],
                 [/[^ab]/, PatDis(CCAlt(['a', 'b'], true))],
                 // Backreferences
-                //[/\1/, PatDis(
+                [/\1/, PatDis(BRAlt(1))],
 
                 // Tricky
                 [/[^]/, PatDis(CCAlt([], true))],
@@ -1202,7 +1211,7 @@ function makeTestCases() {
                 [/f(.)z/, PatDis(PCAlt('f', CGAlt(Dis(DOT_ALT), PCAlt('z'))))],
             ];
         } catch (e) {
-            print("CAUGHT: " + e);
+            pfmt("CAUGHT: {}", e);
             print(e.stack);
             throw new Error("Failed to build test cases.");
         }
@@ -1214,16 +1223,16 @@ function checkParseEquality(expected, actual) {
     var aIsObj = actual instanceof Object;
     if (eIsObj !== aIsObj) {
         print("Expected differs in objectness from actual");
-        print("Expected: " + expected);
-        print("Actual:   " + actual);
+        pfmt("Expected: {!r}", expected);
+        pfmt("Actual:   {!r}", actual);
         throw "difference";
     }
     if (!eIsObj) {
         if (expected === actual)
             return true;
         print("Expected differs from actual in primitive value");
-        print("Expected: " + expected);
-        print("Actual:   " + actual);
+        pfmt("Expected: {!r}", expected);
+        pfmt("Actual:   {!r}", actual);
         throw "difference";
     }
     for (var key in expected) {
@@ -1250,15 +1259,15 @@ function testParser() {
     print('DONE MAKING TEST CASES.');
     print('Beginning tests...');
 
-    var testSuccess = function(pattern, expected) {
+    function testSuccess(pattern, expected) {
         var actual;
         try {
             actual = parse(Scanner(pattern));
             checkParseEquality(expected, actual);
-            print("PASSED: " + new RegExp(pattern));
+            pfmt("PASSED: {}", new RegExp(pattern));
         } catch (e) {
-            print("... exception: " + e);
-            print("... pattern:   " + uneval(pattern));
+            pfmt("... exception: {}", e);
+            pfmt("... pattern:   {}", uneval(pattern));
             if (!actual) {
                 print(e.stack);
                 return;
@@ -1270,16 +1279,16 @@ function testParser() {
         }
     };
 
-    var testFailure = function(pattern, expected) {
+    function testFailure(pattern, expected) {
         var actual;
         try {
             actual = parse(Scanner(pattern));
-            print("FAILED TO RAISE: " + uneval(pattern));
+            pfmt("FAILED TO RAISE: {}", uneval(pattern));
         } catch (e) {
             if (e.constructor === expected.constructor)
-                print("PASSED: " + uneval(pattern));
+                pfmt("PASSED: {}", uneval(pattern));
             else
-                print("FAILED: wrong error");
+                pfmt("FAILED: wrong error");
         }
     }
 

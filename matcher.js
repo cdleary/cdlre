@@ -1,5 +1,8 @@
 /**
  * Defines the internal [[Match]] procedure for |RegExp| objects.
+ *
+ * Note: could create a set of match tests with pre-cooked parse trees, but the 
+ * integration tests seem to be doing just fine for now.
  */
 
 // Matcher(State, Continuation) -> MatchResult
@@ -8,10 +11,7 @@
 var MatchResult = {FAILURE: "failure"};
 var LINE_TERMINATOR = Set('\n', '\r', '\u2028', '\u2029');
 
-function spec(msg) {}
-
 function IdentityContinuation(state) { return state; }
-function identity(x) { return x; }
 
 function ProcedureBuilder(ast, multiline, ignoreCase, input, index) {
     assert(ast !== undefined);
@@ -28,51 +28,9 @@ function ProcedureBuilder(ast, multiline, ignoreCase, input, index) {
     this.spec = new Logger('ProcedureBuilder@Spec');
 }
 
-/* The parenIndex is 1-based. */
-ProcedureBuilder.prototype.checkParenIndex = function(parenIndex) {
-    assert(parenIndex !== undefined);
-    assert(1 <= parenIndex && parenIndex <= this.nCapturingParens, parenIndex);
-};
-
-ProcedureBuilder.prototype.checkCaptures = function(captures) {
-    /* Array length assumes 0-indexing. */
-    assert(captures.length === this.nCapturingParens + 1,
-           captures.length + ' !== ' + (this.nCapturingParens + 1));
-    assert(typeof captures[0] === 'undefined');
-};
-
-ProcedureBuilder.prototype.State = function(endIndex, captures) {
-    this.checkCaptures(captures);
-    return {
-        endIndex: endIndex,
-        captures: captures
-    };
-};
-
-ProcedureBuilder.prototype.CharSet = function() {
-    var self = this;
-    var set = new Set(arguments);
-    set.hasCanonicalized = function(tcc) {
-        var found = false;
-        set.each(function(c) {
-            var cc = self.canonicalize(c);
-            if (cc === tcc) {
-                found = true;
-                return true;
-            }
-        });
-        return found;
-    };
-    return set;
-};
-
-ProcedureBuilder.prototype.CharSetUnion = function(cs1, cs2) {
-    var su = SetUnion(cs1, cs2);
-    su.hasCanonicalized = function(tcc) {
-        return cs1.hasCanonicalized(tcc) || cs2.hasCanonicalized(tcc);
-    };
-    return su;
-};
+/**********************************
+ * AST-to-continuation transforms *
+ **********************************/
 
 ProcedureBuilder.prototype.evalPattern = function() {
     this.clog.debug("evaluating pattern");
@@ -153,63 +111,6 @@ ProcedureBuilder.prototype.evalQuantifier = function(quant) {
     return result;
 };
 
-ProcedureBuilder.prototype.repeatMatcher = function(m, min, max, greedy, x, c,
-                                                    parenIndex, parenCount) {
-    var self = this;
-    var spec = self.spec.debug;
-    spec('15.10.2.5 RepeatMatcher 1');
-    if (max === 0)
-        return c(x);
-    var d = function(y) {
-        spec('15.10.2.5 RepeatMatcher 2.1');
-        if (min === 0 && y.endIndex === x.endIndex)
-            return MatchResult.FAILURE;
-        spec('15.10.2.5 RepeatMatcher 2.2');
-        var min2 = min === 0 ? 0 : min - 1;
-        spec('15.10.2.5 RepeatMatcher 2.3');
-        var max2 = max === Infinity ? Infinity : max - 1;
-        spec('15.10.2.5 RepeatMatcher 2.4');
-        return self.repeatMatcher(m, min2, max2, greedy, y, c, parenIndex, parenCount);
-    };
-    spec('15.10.2.5 RepeatMatcher 3');
-    var cap = x.captures.map(identity);
-    spec('15.10.2.5 RepeatMatcher 4');
-    self.rlog.debug('clearing parens [' + parenIndex + ', ' + (parenIndex + parenCount) + ')');
-    if (parenCount)
-        self.checkParenIndex(parenIndex);
-    for (var k = parenIndex; k < parenIndex + parenCount; ++k)
-        cap[k] = undefined;
-    self.checkCaptures(cap);
-
-    spec('15.10.2.5 RepeatMatcher 5');
-    var e = x.endIndex;
-
-    spec('15.10.2.5 RepeatMatcher 6');
-    var xr = self.State(e, cap);
-
-    spec('15.10.2.5 RepeatMatcher 7');
-    if (min !== 0)
-        return m(xr, d);
-
-    spec('15.10.2.5 RepeatMatcher 8');
-    if (!greedy) {
-        var z = c(x);
-        if (z !== MatchResult.FAILURE)
-            return z;
-        return m(xr, d);
-    }
-
-    spec('15.10.2.5 RepeatMatcher 9');
-    var z = m(xr, d);
-
-    spec('15.10.2.5 RepeatMatcher 10');
-    if (z !== MatchResult.FAILURE)
-        return z;
-
-    spec('15.10.2.5 RepeatMatcher 11');
-    return c(x);
-}
-
 ProcedureBuilder.prototype.evalAssertion = function(assertion) {
     var self = this;
     if (assertion === Assertion.BOL) {
@@ -286,23 +187,6 @@ ProcedureBuilder.prototype.evalClassAtom = function(ca) {
     }
 };
 
-ProcedureBuilder.prototype.CharacterRange = function(A, B) {
-    var self = this;
-    if (A.length !== 1 || B.length !== 1)
-        throw new SyntaxError("Can't use a set as an endpoint in a character range: "
-                              + A + ' to ' + B);
-    var a = A.pop();
-    var b = B.pop();
-    var i = ord(a);
-    var j = ord(b);
-    if (i > j)
-        throw new SyntaxError('Invalid character range: ' + A + ' to ' + B);
-    var chars = [];
-    while (i <= j)
-        chars.push(chr(i++));
-    return self.CharSet.apply(self, chars);
-};
-
 ProcedureBuilder.prototype.evalNonemptyClassRangesNoDash = function(necrnd) {
     switch (necrnd.kind) {
       case 'ClassAtom':
@@ -360,12 +244,48 @@ ProcedureBuilder.prototype.evalCharacterEscape = function(ce) {
     }
 };
 
+ProcedureBuilder.prototype.evalDecimalEscape = function(de) {
+    var i = parseInt(de.value);
+    if (i === 0)
+        return '\0';
+    return i;
+};
+
 ProcedureBuilder.prototype.evalAtomEscape = function(ae) {
     var self = this;
     if (ae.characterEscape) {
         var ch = self.evalCharacterEscape(ae.characterEscape);
         var A = self.CharSet(ch);
         return self.CharacterSetMatcher(A, false);
+    }
+
+    if (ae.decimalEscape) {
+        var E = self.evalDecimalEscape(ae.decimalEscape);
+        if (E instanceof String) {
+            throw new Error("NYI");
+        }
+        assert(typeof E === 'number');
+        var n = E;
+        if (n == 0 || n > self.ast.nCapturingParens)
+            throw new Error("SyntaxError: bad decimal escape value");
+        return function matcher(x, c) {
+            var cap = x.captures;
+            var s = cap[n];
+            if (s === undefined)
+                return c(x);
+            var e = x.endIndex;
+            var len = s.length;
+            var f = e + len;
+            if (f > self.inputLength)
+                return MatchResult.FAILURE;
+            spec('15.10.2.9 AtomEscape::DecimalEscape 5.8');
+            for (var i = 0; i < len; ++i) {
+                if (self.Canonicalize(s[i]) !== self.Canonicalize(self.input[e + i]))
+                    return MatchResult.FAILURE;
+            }
+            var y = self.State(f, cap);
+            return c(y);
+        };
     }
 
     throw new Error("NYI");
@@ -417,6 +337,10 @@ ProcedureBuilder.prototype.evalAtom = function(atom) {
     }
 };
 
+/*********************
+ * Transform helpers *
+ *********************/
+
 ProcedureBuilder.prototype.CharacterSetMatcher = function(charSet, invert) {
     if (!charSet)
         throw new Error("Bad value for charSet: " + charSet);
@@ -444,6 +368,63 @@ ProcedureBuilder.prototype.CharacterSetMatcher = function(charSet, invert) {
     };
 };
 
+ProcedureBuilder.prototype.repeatMatcher = function(m, min, max, greedy, x, c,
+                                                    parenIndex, parenCount) {
+    var self = this;
+    var spec = self.spec.debug;
+    spec('15.10.2.5 RepeatMatcher 1');
+    if (max === 0)
+        return c(x);
+    var d = function(y) {
+        spec('15.10.2.5 RepeatMatcher 2.1');
+        if (min === 0 && y.endIndex === x.endIndex)
+            return MatchResult.FAILURE;
+        spec('15.10.2.5 RepeatMatcher 2.2');
+        var min2 = min === 0 ? 0 : min - 1;
+        spec('15.10.2.5 RepeatMatcher 2.3');
+        var max2 = max === Infinity ? Infinity : max - 1;
+        spec('15.10.2.5 RepeatMatcher 2.4');
+        return self.repeatMatcher(m, min2, max2, greedy, y, c, parenIndex, parenCount);
+    };
+    spec('15.10.2.5 RepeatMatcher 3');
+    var cap = x.captures.map(identity);
+    spec('15.10.2.5 RepeatMatcher 4');
+    self.rlog.debug('clearing parens [' + parenIndex + ', ' + (parenIndex + parenCount) + ')');
+    if (parenCount)
+        self.checkParenIndex(parenIndex);
+    for (var k = parenIndex; k < parenIndex + parenCount; ++k)
+        cap[k] = undefined;
+    self.checkCaptures(cap);
+
+    spec('15.10.2.5 RepeatMatcher 5');
+    var e = x.endIndex;
+
+    spec('15.10.2.5 RepeatMatcher 6');
+    var xr = self.State(e, cap);
+
+    spec('15.10.2.5 RepeatMatcher 7');
+    if (min !== 0)
+        return m(xr, d);
+
+    spec('15.10.2.5 RepeatMatcher 8');
+    if (!greedy) {
+        var z = c(x);
+        if (z !== MatchResult.FAILURE)
+            return z;
+        return m(xr, d);
+    }
+
+    spec('15.10.2.5 RepeatMatcher 9');
+    var z = m(xr, d);
+
+    spec('15.10.2.5 RepeatMatcher 10');
+    if (z !== MatchResult.FAILURE)
+        return z;
+
+    spec('15.10.2.5 RepeatMatcher 11');
+    return c(x);
+}
+
 ProcedureBuilder.prototype.canonicalize = function(ch) {
     if (!this.ignoreCase)
         return ch;
@@ -454,6 +435,69 @@ ProcedureBuilder.prototype.canonicalize = function(ch) {
     return (ch.charCodeAt(0) >= 128 && cu.charCodeAt(0) < 128)
         ? ch
         : cu;
+};
+
+ProcedureBuilder.prototype.CharacterRange = function(A, B) {
+    var self = this;
+    if (A.length !== 1 || B.length !== 1)
+        throw new SyntaxError("Can't use a set as an endpoint in a character range: "
+                              + A + ' to ' + B);
+    var a = A.pop();
+    var b = B.pop();
+    var i = ord(a);
+    var j = ord(b);
+    if (i > j)
+        throw new SyntaxError('Invalid character range: ' + A + ' to ' + B);
+    var chars = [];
+    while (i <= j)
+        chars.push(chr(i++));
+    return self.CharSet.apply(self, chars);
+};
+
+/* The parenIndex is 1-based. */
+ProcedureBuilder.prototype.checkParenIndex = function(parenIndex) {
+    assert(parenIndex !== undefined);
+    assert(1 <= parenIndex && parenIndex <= this.nCapturingParens, parenIndex);
+};
+
+ProcedureBuilder.prototype.checkCaptures = function(captures) {
+    /* Array length assumes 0-indexing. */
+    assert(captures.length === this.nCapturingParens + 1,
+           captures.length + ' !== ' + (this.nCapturingParens + 1));
+    assert(typeof captures[0] === 'undefined');
+};
+
+ProcedureBuilder.prototype.State = function(endIndex, captures) {
+    this.checkCaptures(captures);
+    return {
+        endIndex: endIndex,
+        captures: captures
+    };
+};
+
+ProcedureBuilder.prototype.CharSet = function() {
+    var self = this;
+    var set = new Set(arguments);
+    set.hasCanonicalized = function(tcc) {
+        var found = false;
+        set.each(function(c) {
+            var cc = self.canonicalize(c);
+            if (cc === tcc) {
+                found = true;
+                return true;
+            }
+        });
+        return found;
+    };
+    return set;
+};
+
+ProcedureBuilder.prototype.CharSetUnion = function(cs1, cs2) {
+    var su = SetUnion(cs1, cs2);
+    su.hasCanonicalized = function(tcc) {
+        return cs1.hasCanonicalized(tcc) || cs2.hasCanonicalized(tcc);
+    };
+    return su;
 };
 
 /**
@@ -467,9 +511,3 @@ function CompiledProcedure(ast, multiline, ignoreCase) {
         return new ProcedureBuilder(ast, multiline, ignoreCase, str, index).evalPattern();
     };
 }
-
-/* 
- * TODO: could create a set of match tests with pre-cooked parse trees, but the 
- * integration tests seem to be doing just fine for now, since the parse results
- * are well unit-tested.
- */

@@ -24,6 +24,8 @@ function assert(cond, msg) {
     throw new Error("Assertion failure" + (msg !== undefined ? (": " + msg) : ''));
 }
 
+function identity(x) { return x; }
+
 function pformat(v) {
     var s = v.toString();
     var indent = 0;
@@ -61,9 +63,15 @@ function juxtapose(block1, block2, columnWidth) {
     return accum.join('\n')
 }
 
-function ord(c) { return c.charCodeAt(0); }
+/** Return the ordinal number corresponding to character c. */
+function ord(c) {
+    return c.charCodeAt(0);
+}
 
-function chr(n) { return String.fromCharCode(n); }
+/** Return the character corresponding to the ordinal number n. */
+function chr(n) {
+    return String.fromCharCode(n);
+}
 
 function isAlpha(c) {
     var cc = ord(c);
@@ -74,14 +82,25 @@ function isAlpha(c) {
 function fmt(format) {
     var replaceCount = 0;
     var fmtArguments = arguments;
-    return format.replace(/{(\d*)}/g, function makeReplacement(matchedStr, argNum, offset, wholeStr) {
-        if (argNum)
-            return fmtArguments[parseInt(argNum) + 1];
+    return format.replace(/{(\d*)(!r)?}/g, function repl(matchedStr, argNum, shouldRepr, offset,
+                                                         wholeStr) {
+        var transform = identity;
 
-        if (offset > 0 && wholeStr.substr(offset - 1, fmt.ESCAPE_SEQUENCE.length) === fmt.ESCAPE_SEQUENCE)
-            return fmt.ESCAPE_RESULT;
+        if (shouldRepr || argNum) {
+            /* No possibility of an escape sequence. */
+            if (shouldRepr)
+                transform = uneval;
 
-        return fmtArguments[++replaceCount];
+            if (argNum) {
+                /* Explicit argument numbers don't bump the replace count. */
+                return transform(fmtArguments[parseInt(argNum) + 1]);
+            }
+        } else {
+            if (offset > 0 && wholeStr.substr(offset - 1, fmt.ESCAPE_SEQUENCE.length) === fmt.ESCAPE_SEQUENCE)
+                return fmt.ESCAPE_RESULT;
+        }
+
+        return transform(fmtArguments[++replaceCount]);
     });
 }
 
