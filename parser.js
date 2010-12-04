@@ -14,14 +14,6 @@ var parserLog = new Logger('Parser');
 parserLog.start = function(prod) { return this.info('Starting production: ' + prod); };
 parserLog.resolve = function(resolution) { return this.info('Resolved production: ' + resolution); };
 
-function ord(c) { return c.charCodeAt(0); }
-function chr(n) { return String.fromCharCode(n); }
-function isAlpha(c) {
-    var cc = ord(c);
-    return ord('a') <= cc && cc <= ord('z') ||
-           ord('A') <= cc && cc <= ord('Z');
-}
-
 function Scanner(pattern) {
     var log = new Logger("Scanner");
     var index = 0;
@@ -1251,43 +1243,6 @@ function checkParseEquality(expected, actual) {
         }
     }
 }
-
-function pformat(v) {
-    var s = v.toString();
-    var indent = 0;
-    var s = s.replace(/(\(|\)|,\s*)/g, function(tok) {
-        tok = tok[0];
-        if (tok === '(') {
-            indent += 1;
-        }
-        if (tok === ')') {
-            indent -= 1;
-            return ')';
-        }
-        var accum = [];
-        for (var i = 0; i < indent; ++i)
-            accum.push('  ');
-        return tok + '\n' + accum.join('');
-    });
-    return s;
-}
-
-function juxtapose(block1, block2, columnWidth) {
-    var accum = [];
-    var lb1 = block1.split('\n');
-    var lb2 = block2.split('\n');
-    for (var i = 0; i < Math.max(lb1.length, lb2.length); ++i) {
-        /* Is there no fast way to pad these things? */
-        var line1 = lb1[i] || '';
-        while (line1.length < columnWidth)
-            line1 = line1 + ' ';
-        var line2 = lb2[i] || '';
-        accum.push(line1 + '    ' + line2);
-    }
-    return accum.join('\n')
-}
-
-function pprint(v) { print(pformat(v)); }
 
 function testParser() {
     print('START MAKING TEST CASES...');

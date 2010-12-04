@@ -120,7 +120,7 @@ function GuestBuiltins() {
 function matchToString(match) {
     var pieces = ['{'];
     'index input length'.split(' ').forEach(function(attr) {
-        pieces.push(attr + ': ' + match[attr], ', ');
+        pieces.push(fmt('{}: {}, ', attr, match[attr]));
     });
     pieces.push('[')
     for (var i = 0; i < match.length; ++i)
@@ -132,7 +132,7 @@ function matchToString(match) {
 
 function checkMatchResults(targetName, target, guest) {
     if ((target === null) !== (guest === null)) {
-        print("MISMATCH: " + targetName + ": " + uneval(target) + "; guest: " + uneval(guest));
+        pfmt("MISMATCH: {}: {}; guest: {}", targetName, uneval(target), uneval(guest));
         return false;
     }
     var ok = true;
@@ -186,8 +186,8 @@ function testCDLRE() {
             var guestRE = new guestBuiltins.RegExp(pattern, flags);
             var guestResult = guestRE.exec(input);
         } catch (e) {
-            print("CAUGHT: " + e);
-            print("STACK:  " + e.stack);
+            pfmt("CAUGHT: {}", e);
+            pfmt("STACK:  {}", e.stack);
             fail(pattern, flags, input);
             return;
         }
@@ -200,8 +200,8 @@ function testCDLRE() {
         try {
             var hostRE = new RegExp(pattern, flags);
         } catch (e) {
-            print("CAUGHT: " + e);
-            print("STACK:  " + e.stack);
+            pfmt("CAUGHT: {}", e);
+            pfmt("STACK:  {}", e.stack);
             fail(pattern, flags, input);
             return;
         }
@@ -454,7 +454,7 @@ function testCDLRE() {
     }
 
     if (failCount)
-        print("FAILED " + failCount + "/" + tests.length);
+        pfmt("FAILED {}/{}", failCount, tests.length);
     else
-        print("PASSED " + tests.length + "/" + tests.length);
+        pfmt("PASSED {0}/{0}", tests.length);
 }
