@@ -38,10 +38,10 @@ function Scanner(pattern) {
 
     var self = {
         start: function(prod) {
-            parserLog.info('SPROD: ' + prod + ' @ ' + uneval(self.rest));
+            parserLog.info('SPROD: ' + prod + ' @ ' + uneval(self.rest()));
         },
         resolve: function(resolution) {
-            parserLog.info('RPROD: ' + resolution + ' @ ' + uneval(self.rest));
+            parserLog.info('RPROD: ' + resolution + ' @ ' + uneval(self.rest()));
         },
 
         /* Warning: these use 1-based indexing. */
@@ -73,7 +73,7 @@ function Scanner(pattern) {
                 index += 1;
                 return;
             }
-            throw new SyntaxError(msg + ': ' + uneval(self.rest));
+            throw new SyntaxError(msg + ': ' + uneval(self.rest()));
         },
         pop: function() {
             if (index === pattern.length)
@@ -95,12 +95,12 @@ function Scanner(pattern) {
         /** Throw a SyntaxError when non-optional and a decimal digit is not found. */
         popDecimalDigit: function(optional) {
             try {
-                var accum = toDigit(this.next);
+                var accum = toDigit(this.next());
             } catch (e) {
                 if (e.toString().indexOf('Non-digit') !== -1) {
                     if (optional)
                         throw e;
-                    throw new SyntaxError('Invalid decimal digit: ' + this.next);
+                    throw new SyntaxError('Invalid decimal digit: ' + this.next());
                 }
                 throw e; // Unknown!
             }
@@ -122,17 +122,17 @@ function Scanner(pattern) {
             }
             return accum;
         },
+        next: function() { return pattern[index]; },
+        rest: function() { return pattern.substr(index); },
+        length: function() { return pattern.length - index; },
         toString: function() {
             return 'Scanner(pattern=' + uneval(pattern) + ', index=' + index + ')';
         },
         SyntaxError: function(msg) {
-            return new SyntaxError(msg + "; rest: " + uneval(self.rest));
+            return new SyntaxError(msg + "; rest: " + uneval(self.rest()));
         },
     };
 
-    Object.defineProperty(self, 'next', {get: function() { return pattern[index]; }});
-    Object.defineProperty(self, 'length', {get: function() { return pattern.length - index; }});
-    Object.defineProperty(self, 'rest', {get: function() { return pattern.substr(index); }});
     return self;
 }
 
@@ -639,7 +639,7 @@ function parseAssertion(scanner) {
     if (scanner.tryPop('$'))
         return Assertion.EOL;
 
-    if (scanner.next === BACKSLASH) {
+    if (scanner.next() === BACKSLASH) {
         if (scanner.tryPop(BACKSLASH, 'b'))
             return Assertion.WB;
         if (scanner.tryPop(BACKSLASH, 'B'))
@@ -676,7 +676,7 @@ function parseAssertion(scanner) {
  */
 function parseQuantifier(scanner) {
     var result;
-    switch (scanner.next) {
+    switch (scanner.next()) {
       case '*': result = Quantifier.Star(); break;
       case '+': result = Quantifier.Plus(); break;
       case '?': result = Quantifier.Question(); break;
@@ -766,7 +766,7 @@ function parseAtomEscape(scanner) {
     }
 
     /* - ControlEscape */
-    if (scanner.next in CE.ControlEscape)
+    if (scanner.next() in CE.ControlEscape)
         return CE.ControlEscape[scanner.pop()];
     
     if (scanner.tryPop('x'))
@@ -781,11 +781,11 @@ function parseAtomEscape(scanner) {
         return CE.IdentityEscape(ZWNJ);
 
     if (Unicode.CategorySet('Mn', 'Mc', 'Nd', 'Pc', 'Lu', 'Ll', 'Lt', 'Lm', 'Lo', 'Nl')
-                           .has(scanner.next)) {
+                           .has(scanner.next())) {
         throw scanner.SyntaxError('Invalid character for identity escape');
     }
 
-    if (Set('$', '_').has(scanner.next))
+    if (Set('$', '_').has(scanner.next()))
         throw scanner.SyntaxError("Invalid escape; identifier part");
 
     return CE.IdentityEscape(scanner.pop());
@@ -813,10 +813,10 @@ function parseClassAtomNoDash(scanner) {
     if (scanner.tryPop(BACKSLASH))
         return ClassAtomNoDash.ClassEscape(parseClassEscape(scanner));
 
-    if (Set(BACKSLASH, ']', '-').has(scanner.next))
+    if (Set(BACKSLASH, ']', '-').has(scanner.next()))
         throw scanner.SyntaxError('Invalid ClassAtomNoDash source character');
 
-    parserLog.debug("Popping class-atom source-character: " + uneval(scanner.next));
+    parserLog.debug("Popping class-atom source-character: " + uneval(scanner.next()));
     return ClassAtomNoDash.SourceCharacter(scanner.pop());
 }
 
@@ -842,7 +842,7 @@ function parseNonemptyClassRangesNoDash(scanner) {
     scanner.start('NonemptyClassRangesNoDash');
 
     /* When lookahead is a dash, we're forced to use the ClassAtom expansion. */
-    if (scanner.next === '-') {
+    if (scanner.next() === '-') {
         scanner.resolve('NonemptyClassRangesNoDash :: ClassAtom (saw "-")');
         var classAtom = parseClassAtom(scanner);
         return NonemptyClassRangesNoDash.ClassAtom(classAtom);
@@ -851,7 +851,7 @@ function parseNonemptyClassRangesNoDash(scanner) {
     var cand = parseClassAtomNoDash(scanner);
 
     /* When follow is not a valid character, we're forced to use the ClassAtom expansion. */
-    if (scanner.next === ']') {
+    if (scanner.next() === ']') {
         scanner.resolve('NonemptyClassRangesNoDash :: ClassAtom (saw "]")');
         return NonemptyClassRangesNoDash.ClassAtom(ClassAtom.NoDash(cand));
     }
@@ -888,7 +888,7 @@ function parseNonemptyClassRanges(scanner) {
         return NonemptyClassRanges.NotDashed(classAtom, parseNonemptyClassRangesNoDash(scanner));
     }
 
-    if (scanner.next === ']') {
+    if (scanner.next() === ']') {
         scanner.resolve('NonemptyClassRanges :: ClassAtom (saw "]")');
         return NonemptyClassRanges.NotDashed(classAtom);
     }
@@ -910,7 +910,7 @@ function parseNonemptyClassRanges(scanner) {
  */
 function parseClassRanges(scanner) {
     scanner.start('ClassRanges');
-    if (scanner.next === ']')
+    if (scanner.next() === ']')
         return ClassRanges.EMPTY;
     return ClassRanges(parseNonemptyClassRanges(scanner));
 }
@@ -968,7 +968,7 @@ function parseAtom(scanner) {
         return result;
     }
 
-    if (PatternCharacter.BAD.has(scanner.next))
+    if (PatternCharacter.BAD.has(scanner.next()))
         throw scanner.SyntaxError('Bad pattern character');
 
     parserLog.info('Atom :: PatternCharacter');
@@ -1006,7 +1006,7 @@ function parseTerm(scanner) {
 function parseAlternative(scanner) {
     assert(scanner instanceof Object, scanner);
     scanner.start('Alternative');
-    if (scanner.length === 0 || parseAlternative.BAD_START.has(scanner.next)) {
+    if (scanner.length() === 0 || parseAlternative.BAD_START.has(scanner.next())) {
         parserLog.info('Alternative :: ε');
         return Alternative.EMPTY;
     }
@@ -1036,7 +1036,7 @@ parseAlternative.BAD_START = SetDifference(
  *               | Alternative "|" Disjunction
  */
 function parseDisjunction(scanner) {
-    parserLog.info('parsing Disjunction; rest: ' + uneval(scanner.rest));
+    parserLog.info('parsing Disjunction; rest: ' + uneval(scanner.rest()));
     var lhs = parseAlternative(scanner);
     if (scanner.tryPop('|')) {
         parserLog.info('Disjunction :: Alternative "|" Disjunction');
@@ -1050,7 +1050,7 @@ function parse(scanner) {
     if (!(scanner instanceof Object))
         throw new Error('Bad scanner value: ' + scanner);
     var dis = parseDisjunction(scanner);
-    if (scanner.length !== 0)
+    if (scanner.length() !== 0)
         throw new scanner.SyntaxError("Cruft at end of pattern");
     var pattern = Pattern(dis);
     pattern.nCapturingParens = scanner.capturingParenCount();
