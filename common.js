@@ -1,8 +1,4 @@
 if (typeof uneval === 'undefined') {
-    /* 
-     * FIXME:   Care about this more when it actually runs in more than
-     *          one browser...
-     */
     uneval = function(obj) {
         if (obj instanceof RegExp) {
             return obj.toString();
@@ -13,6 +9,20 @@ if (typeof uneval === 'undefined') {
           case 'boolean': return obj.toString();
           case 'undefined': return 'undefined';
           case 'function': return '<function>';
+          case 'object':
+            var pieces = ['{'];
+            var sawKey = false;
+            for (var key in obj) {
+                if (!obj.hasOwnProperty(key))
+                    continue;
+                var value = obj[key];
+                sawKey = true;
+                pieces.push(uneval(key), ': ', uneval(value), ', ');
+            }
+            if (sawKey)
+                pieces.pop(); /* Pop trailing comma. */
+            pieces.push('}');
+            return pieces.join('');
         }
         throw new Error("NYI: " + typeof obj);
     };

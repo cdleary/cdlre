@@ -1005,7 +1005,6 @@ function parseTerm(scanner) {
  */
 function parseAlternative(scanner) {
     assert(scanner instanceof Object, scanner);
-    assert(parseAlternative.BAD_START !== undefined);
     scanner.start('Alternative');
     if (scanner.length === 0 || parseAlternative.BAD_START.has(scanner.next)) {
         parserLog.info('Alternative :: ε');
@@ -1032,15 +1031,12 @@ parseAlternative.BAD_START = SetDifference(
     Set('.', BACKSLASH, '(', '[', '^', '$')
 );
 
-assert(parseAlternative.BAD_START !== undefined);
-
 /**
  * Disjunction ::= Alternative
  *               | Alternative "|" Disjunction
  */
 function parseDisjunction(scanner) {
     parserLog.info('parsing Disjunction; rest: ' + uneval(scanner.rest));
-    assert(parseAlternative.BAD_START !== undefined, 'in parseDisjunction');
     var lhs = parseAlternative(scanner);
     if (scanner.tryPop('|')) {
         parserLog.info('Disjunction :: Alternative "|" Disjunction');
@@ -1062,7 +1058,6 @@ function parse(scanner) {
 }
 
 function makeAST(pattern) {
-    assert(parseAlternative.BAD_START !== undefined, 'in makeAST');
     return parse(Scanner(pattern));
 }
 

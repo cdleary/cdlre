@@ -371,7 +371,7 @@ ProcedureBuilder.prototype.CharacterSetMatcher = function(charSet, invert) {
 ProcedureBuilder.prototype.repeatMatcher = function(m, min, max, greedy, x, c,
                                                     parenIndex, parenCount) {
     var self = this;
-    var spec = self.spec.debug;
+    var spec = self.spec.debug.bind(self.spec);
     spec('15.10.2.5 RepeatMatcher 1');
     if (max === 0)
         return c(x);

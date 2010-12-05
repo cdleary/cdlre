@@ -24,5 +24,5 @@ print('"', end='')
 for i in range(max(bitmap.keys()) + 1):
     item = bitmap[i]
     assert item & 0xffff == item
-    print(r'\u%x' % item, end='')
+    print(r'\u%04x' % item, end='')
 print('"')

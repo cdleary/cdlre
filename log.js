@@ -14,13 +14,6 @@ Logger.levels = {
 
 Logger.defaultLevel = Logger.levels.NONE;
  
-function Arrayify(args) {
-    var accum = [];
-    for (var i = 0; i < args.length; ++i)
-        accum.push(args[i]);
-    return accum;
-};
-
 (function createLogFunctions() {
     for (var level in Logger.levels) {
         if (!Logger.levels.hasOwnProperty(level) || level == 'ALL')
@@ -32,10 +25,13 @@ function Arrayify(args) {
          * scoped within a loop body.
          */
         (function createLogFunction(level) {
-            Logger.prototype[level.toLowerCase()] = function() {
-                if (this.logLevel >= Logger.levels[level])
-                    print(this.name + ": " + level.toUpperCase() + ": "
-                          + Arrayify(arguments).join(' '));
+            Logger.prototype[level.toLowerCase()] = function(format) {
+                if (this.logLevel < Logger.levels[level])
+                    return;
+                assert(typeof format === 'string' || format instanceof String);
+                var fmtArgs = [format].concat(argsToArray(arguments).slice(1));
+                var msg = fmt.apply(null, fmtArgs);
+                pfmt('{}: {}: {}', this.name, level.toUpperCase(), msg);
             };
         })(level);
     }

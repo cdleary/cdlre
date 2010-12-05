@@ -4,10 +4,8 @@
  * ECMAScripture.
  */
 
-assert(parseAlternative.BAD_START !== undefined, 'in cdlre.js');
-
 function GuestBuiltins() {
-    var LOG = new Logger("RegExp");
+    var log = new Logger("RegExp");
 
     var ToString = function(o) { return new String(o).toString(); }
 
@@ -28,7 +26,6 @@ function GuestBuiltins() {
             throw new Error("NYI");
         var P = pattern === undefined ? '' : ToString(pattern);
         var F = flags === undefined ? '' : ToString(flags);
-        assert(parseAlternative.BAD_START !== undefined, 'in RegExp');
         var ast = makeAST(P); // throws SyntaxError, per spec.
         assert(ast !== undefined);
         /* 
@@ -64,6 +61,7 @@ function GuestBuiltins() {
                 return null;
             }
             var r = this.__match(s, i);
+            log.debug('match result {!r}', r);
             if (r == MatchResult.FAILURE)
                 i += 1;
             else
@@ -74,29 +72,21 @@ function GuestBuiltins() {
         if (global)
             this.lastIndex = e;
         var n = r.captures.length;
-        LOG.debug("capture array length: " + n);
+        log.debug(fmt("capture array: {!r}", r.captures));
         var A = new Array();
         // FIXME: need matchIndex.
 
-        LOG.debug("offset i: " + i);
-        LOG.debug("offset e: " + e);
         var matchedSubstr = s.substr(i, e - i);
-        Object.defineProperty(A, '0', {
-            value: matchedSubstr,
-            writable: true,
-            enumerable: true,
-            confiurable: true,
-        });
+        log.debug('offset i:       {!r}', i);
+        log.debug('offset e:       {!r}', e);
+        log.debug('matched substr: {!r}', matchedSubstr);
 
+        A[0] = matchedSubstr;
+        log.debug('setting captures 1 to {}', n);
         for (var i = 1; i < n; ++i) {
             var captureI = r.captures[i];
-            LOG.debug("capture index: " + i + "; value: " + captureI);
-            Object.defineProperty(A, i.toString(), {
-                value: captureI,
-                writable: true,
-                enumerable: true,
-                configurable: true,
-            });
+            log.debug("capture index: {}; value: {!r}", i, captureI);
+            A[i] = captureI;
         }
         return A;
     };
@@ -128,52 +118,67 @@ function matchToString(match) {
     pieces.push('[')
     for (var i = 0; i < match.length; ++i)
         pieces.push(uneval(match[i]), ', ');
-    pieces.pop();
+    if (match.length)
+        pieces.pop();
     pieces.push(']}');
     return pieces.join('');
 }
 
-function checkMatchResults(targetName, target, guest) {
-    if ((target === null) !== (guest === null)) {
-        pfmt("MISMATCH: {}: {}; guest: {}", targetName, uneval(target), uneval(guest));
+function checkMatchResults(name1, result1, name2, result2) {
+    if ((result1 === null) !== (result2 === null)) {
+        pfmt("MISMATCH: {}: {}; {}: {}", name1, uneval(result1), name2, uneval(result2));
         return false;
     }
-    if ((target === null) && (guest === null))
+
+    if ((result1 === null) && (result2 === null))
         return true;
-    var check = function(attr) {
-        var targetValue = target[attr];
-        var guestValue = guest[attr];
-        if (targetValue === guestValue)
+
+    function check(attr) {
+        var value1 = result1[attr];
+        var value2 = result2[attr];
+        if (value1 === value2)
             return true;
-        print('MISMATCH:'
-            + '\n\tkey: ' + attr
-            + '\n\t\t' + targetName + ': ' + uneval(targetValue)
-            + '\n\t\tguest: ' + uneval(guestValue)
-            + '\n\tmatch:'
-            + '\n\t\t' + targetName + ': ' + matchToString(target)
-            + '\n\t\tguest: ' + matchToString(guest));
+
+        pfmt('MISMATCH: {} != {}', name1, name2);
+        pfmt('\tkey: {}', attr);
+        pfmt('\t\t{}: {!r}', name1, value1);
+        pfmt('\t\t{}: {!r}', name2, value2);
+        pfmt('\tmatch:');
+        pfmt('\t\t{}: {}', name1, matchToString(result1));
+        pfmt('\t\t{}: {}', name2, matchToString(result2));
         return false;
     };
-    for (var i = 0; i < target.length; ++i) {
-        if (!check(i))
-            return false;
-    }
     var attrs = ['length', /* FIXME 'index', 'input' */];
     for (var i = 0; i < attrs.length; ++i) {
         var attr = attrs[i];
         if (!check(attr))
             return false;
     }
+    for (var i = 0; i < result2.length; ++i) {
+        if (!check(i))
+            return false;
+    }
     return true;
 }
 
 function testCDLRE() {
-    assert(parseAlternative.BAD_START !== undefined, 'in testCDLRE');
     var guestBuiltins = GuestBuiltins();
     var failCount = 0;
 
     function checkFlags(flags) {
         assert(flags !== undefined ? flags.match(/^[igym]{0,4}$/) : true, flags);
+    }
+
+    /**
+     * Produce a flags string or undefined, corresponding to the flags set on
+     * |re|.
+     */
+    function extractFlags(re) {
+        var flags = [(re.ignoreCase ? 'i' : ''),
+                     (re.multiline ? 'm' : ''),
+                     (re.sticky ? 'y' : ''),
+                     (re.global ? 'g' : '')].join('');
+        return flags.length === 0 ? undefined : flags;
     }
 
     function fail(pattern, flags, input) {
@@ -231,17 +236,17 @@ function testCDLRE() {
         var hostResult = compileAndExecHost(pattern, flags, input);
 
         /* Compare guest and host. */
-        if (!checkMatchResults('host', hostResult, guestResult))
+        if (!checkMatchResults('host', hostResult, 'guest', guestResult))
             fail(pattern, flags, input);
     }
 
-    function checkAgainstResult(pattern, flags, input, result) {
+    function checkAgainstSpec(pattern, flags, input, specResult) {
         checkFlags(flags);
         var guestResult = compileAndExecGuest(pattern, flags, input);
         if (guestResult === undefined) /* Failure. */
             return;
 
-        if (!checkMatchResults('known', result, guestResult))
+        if (!checkMatchResults('spec', specResult, 'guest', guestResult))
             fail(pattern, flags, input);
     }
 
@@ -424,18 +429,6 @@ function testCDLRE() {
         /* FIXME: also permit a object literal that has an expected value. */
     ];
 
-    /**
-     * Produce a flags string or undefined, corresponding to the flags set on
-     * |re|.
-     */
-    var extractFlags = function(re) {
-        var flags = [(re.ignoreCase ? 'i' : ''),
-                     (re.multiline ? 'm' : ''),
-                     (re.sticky ? 'y' : ''),
-                     (re.global ? 'g' : '')].join('');
-        return flags.length === 0 ? undefined : flags;
-    }
-
     for (var i = 0; i < tests.length; ++i) {
         assert(tests[i] !== undefined, fmt('test {} is undefined, after {!r}', i, tests[i - 1]));
         var test = tests[i];
@@ -445,7 +438,7 @@ function testCDLRE() {
             pattern = test.re.source;
             flags = extractFlags(test.re);
             result = test.result;
-            checker = checkAgainstResult;
+            checker = checkAgainstSpec;
         } else if (typeof test[0] === 'string') {
             input = test[1];
             pattern = test[0];
