@@ -7,13 +7,12 @@ function Set() {
     self._map = {};
     for (var i = 0; i < items.length; ++i)
         self._map[items[i]] = null;
-    self._length = items.length;
-    Object.defineProperty(self, 'length', {get: function() { return self._length; }});
+    self.length = items.length;
 }
 
 Set.prototype.pop = function() {
     var self = this;
-    if (!self._length)
+    if (!self.length)
         throw new Error("Empty set");
     var result;
     for (var key in self._map) {
@@ -23,7 +22,7 @@ Set.prototype.pop = function() {
         delete self._map[key];
         break;
     }
-    self._length -= 1;
+    self.length -= 1;
     return result;
 };
 
@@ -42,9 +41,18 @@ Set.prototype.each = function(callback) {
 };
 
 Set.prototype.toString = function() {
-    return 'Set(' + Object.keys(this._map).map(function(item) {
-        return uneval(item);
-    }).join(", ") + ')';
+    var pieces = ['Set('];
+    var saw = false;
+    for (var key in this._map) {
+        if (!this._map.hasOwnProperty(key))
+            continue;
+        saw = true;
+        pieces.push(uneval(key), ', ');
+    }
+    if (saw)
+        pieces.pop();
+    pieces.push(')')
+    return pieces.join('');
 };
 
 function SetUnion(set1, set2) {
