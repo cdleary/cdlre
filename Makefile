@@ -2,6 +2,19 @@
 test:
 	jsv -f common.js -f lzw.js -f unicat.js -f unicode.js -f log.js -f set.js -f parser.js -f matcher.js -f cdlre.js -e 'testParser(); testCDLRE();'
 
+.PHONY: hosted
+hosted:
+	mkdir -p hosted/cdlre
+	ln -s ${PWD}/cdlre.html hosted/cdlre.html
+	ln -s ${PWD}/cdlre.js hosted/cdlre/cdlre.js
+	ln -s ${PWD}/common.js hosted/cdlre/common.js
+	ln -s ${PWD}/set.js hosted/cdlre/set.js
+	ln -s ${PWD}/unicode.js hosted/cdlre/unicode.js
+	ln -s ${PWD}/parser.js hosted/cdlre/parser.js
+	ln -s ${PWD}/log.js hosted/cdlre/log.js
+	ln -s ${PWD}/matcher.js hosted/cdlre/matcher.js
+	ln -s ${PWD}/unicat.js hosted/cdlre/unicat.js
+
 .PHONY: lzw
 lzw:
 	echo -n 'var encIdentityEscape = ' > unicat.js

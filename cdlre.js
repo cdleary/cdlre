@@ -406,6 +406,8 @@ function testCDLRE() {
         [/ab*/, "xabyabbbz"],
         [/ab*/, "xayabbbz"],
         [/a*b/, "xxx"],
+        [/(?:(f)(o)(o)|(b)(a)(r))*/, "foobar"],
+        [/((a)?(b)?c)*/, "bcac"],
 
         //[')', "test(); woo"], FIXME should be syntax error
         //[/x\d\dy/, "abcx45ysss235"], FIXME digit atom escape
@@ -435,6 +437,7 @@ function testCDLRE() {
     }
 
     for (var i = 0; i < tests.length; ++i) {
+        assert(tests[i] !== undefined, fmt('test {} is undefined, after {!r}', i, tests[i - 1]));
         var test = tests[i];
         var pattern, flags, input, result, checker;
         if (typeof test === 'object' && test.re !== undefined) {
