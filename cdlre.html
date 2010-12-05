@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>cdlre - JS-regexp in JS</title>
+        <script type='text/javascript' src='cdlre/common.js'></script>
+        <script type='text/javascript' src='cdlre/set.js'></script>
+        <script type='text/javascript' src='cdlre/log.js'></script>
+        <script type='text/javascript' src='cdlre/unicat.js'></script>
+        <script type='text/javascript' src='cdlre/unicode.js'></script>
+        <script type='text/javascript' src='cdlre/parser.js'></script>
+        <script type='text/javascript' src='cdlre/matcher.js'></script>
+        <script type='text/javascript' src='cdlre/cdlre.js'></script>
+        <script type='text/javascript'>
+            function print() {
+                var output = document.getElementById('re-output');
+                for (var i = 0; i < arguments.length; ++i)
+                    output.value += arguments[i];
+                output.value += '\n';
+            }
+
+            function runRegExp() {
+                var literalStr = document.getElementById('re-literal').value;
+                var inputStr = document.getElementById('re-input').value;
+                var output = document.getElementById('re-output');
+                try {
+                    var literal = eval(literalStr);
+                    var guestRE = cdlre.fromHostRE(literal);
+                    var guestResult = guestRE.exec(inputStr);
+                    output.value = cdlre.matchResultToString(guestResult);
+                } catch (e) {
+                    output.value = e.toString();
+                }
+                return false;
+            }
+        </script>
+        <style type='text/css'>
+            .full-textarea textarea {
+                width: 100%;
+            }
+        </style>
+    </head>
+    <body>
+        <form onsubmit='return runRegExp();'>
+            <label for='re-literal'>RegExp literal</label>
+            <input id='re-literal' value='//' />
+            <br />
+            <label for='re-input'>RegExp input</label>
+            <input id='re-input' />
+            <br />
+            <input type='submit' value='Run' />
+            <br />
+            <div class='full-textarea'>
+                <textarea id='re-output' cols='80' rows='24' value=''></textarea>
+            </div>
+        </form>
+        <script type='text/javascript'>
+            var output = document.getElementById('re-output');
+            output.value = '';
+            testCDLRE();
+        </script>
+    </body>
+</html>
