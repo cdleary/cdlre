@@ -442,6 +442,7 @@ function testCDLRE() {
         /* FIXME: also permit a object literal that has an expected value. */
     ];
 
+    var start = new Date();
     for (var i = 0; i < tests.length; ++i) {
         assert(tests[i] !== undefined, fmt('test {} is undefined, after {!r}', i, tests[i - 1]));
         var test = tests[i];
@@ -471,9 +472,12 @@ function testCDLRE() {
             throw e;
         }
     }
+    var end = new Date();
 
     if (failCount)
         pfmt("FAILED {}/{}", failCount, tests.length);
     else
         pfmt("PASSED {0}/{0}", tests.length);
+
+    pfmt("Test time: {}s", (end - start) / 1000);
 }
