@@ -13,6 +13,8 @@ bitmap = collections.defaultdict(int)
 with open('unicode_categories.txt') as file:
     for line in file:
         hexcode, category, *rest = line.split()
+        if category not in TARGET_CATEGORIES:
+            continue
         dec = int(hexcode, 16)
         index, bit = divmod(dec, 16)
         assert bitmap[index] & (1 << bit) == 0
