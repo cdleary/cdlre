@@ -47,8 +47,9 @@ function GuestBuiltins() {
      * if the match was unsuccessful.
      */
     RegExp.prototype.exec = function(string) {
-        var s = new String(string).toString();
-        var length = s.length;
+        function spec() {} // FIXME
+        var S = ToString(string);
+        var length = S.length;
         var lastIndex = this.lastIndex;
         var i = lastIndex; // FIXME: toInteger semantics.
         var global = this.global;
@@ -60,7 +61,7 @@ function GuestBuiltins() {
                 this.lastIndex = 0;
                 return null;
             }
-            var r = this.__match(s, i);
+            var r = this.__match(S, i);
             log.debug('match result {!r}', r);
             if (r == MatchResult.FAILURE)
                 i += 1;
@@ -73,10 +74,16 @@ function GuestBuiltins() {
             this.lastIndex = e;
         var n = r.captures.length;
         log.debug(fmt("capture array: {!r}", r.captures));
+        spec('15.10.6.2 Regexp.prototype.exec(string) 13')
         var A = new Array();
-        // FIXME: need matchIndex.
+        spec('15.10.6.2 Regexp.prototype.exec(string) 14')
+        var matchIndex = i;
+        spec('15.10.6.2 Regexp.prototype.exec(string) 15')
+        A.index = matchIndex;
+        spec('15.10.6.2 Regexp.prototype.exec(string) 16')
+        A.input = S;
 
-        var matchedSubstr = s.substr(i, e - i);
+        var matchedSubstr = S.substr(i, e - i);
         log.debug('offset i:       {!r}', i);
         log.debug('offset e:       {!r}', e);
         log.debug('matched substr: {!r}', matchedSubstr);
@@ -148,7 +155,7 @@ function checkMatchResults(name1, result1, name2, result2) {
         pfmt('\t\t{}: {}', name2, matchToString(result2));
         return false;
     };
-    var attrs = ['length', /* FIXME 'index', 'input' */];
+    var attrs = ['length', 'index', /* FIXME 'input' */];
     for (var i = 0; i < attrs.length; ++i) {
         var attr = attrs[i];
         if (!check(attr))
@@ -261,14 +268,18 @@ function testCDLRE() {
 
     var tests = [
         /* 15.10.2.5 Term Note 2 */
-        {re: /a[a-z]{2,4}/, op: 'exec', str: 'abcdefghi', result: ['abcde']},
-        {re: /a[a-z]{2,4}?/, op: 'exec', str: 'abcdefghi', result: ['abc']},
-        {re: /(aa|aabaac|ba|b|c)*/, op: 'exec', str: 'aabaac', result: ['aaba', 'ba']},
+        {re: /a[a-z]{2,4}/, op: 'exec', str: 'abcdefghi',
+         result: {0: 'abcde', index: 0, length: 1}},
+        {re: /a[a-z]{2,4}?/, op: 'exec', str: 'abcdefghi',
+         result: {0: 'abc', index: 0, length: 1}},
+        {re: /(aa|aabaac|ba|b|c)*/, op: 'exec', str: 'aabaac',
+         result: {0: 'aaba', 1: 'ba', index: 0, length: 2}},
         //"aaaaaaaaaa,aaaaaaaaaaaaaaa".replace(/^(a+)\1*,\1+$/,"$1")
 
         /* 15.10.2.5 Term Note 3 */
         {re: /(z)((a+)?(b+)?(c))*/, op: 'exec', str: 'zaacbbbcac',
-         result: ["zaacbbbcac", "z", "ac", "a", undefined, "c"]},
+         result: {0: "zaacbbbcac", 1: "z", 2: "ac", 3: "a", 4: undefined, 5: "c",
+                  index: 0, length: 6}},
 
         [/.+/, "...."],
         [/[^]/, "/"],
@@ -420,11 +431,13 @@ function testCDLRE() {
 
         [/^(\"(.)*?\"|[:{}true])+?$/, "{\"guidePro\":{\"ok\":true}}"],
 
-        /* ECMA 15.10.2.5 Note 3 FIXME: which revision? */
-        [/(z)((a+)?(b+)?(c))*/, "zaacbbbcac"],
+        [/(z)((a+)?(b+)?(c))*/, "zaacbbbcac"], /* ECMA 15.10.2.5 Note 3 */
 
-        /* From bug 613820. FIXME: backref */
-        [/(?:^(a)|\1(a)|(ab)){2}/, "aab"],
+        [/(?:^(a)|\1(a)|(ab)){2}/, "aab"], /* Mozilla bug 613820 */
+
+        [/(?:a*?){2,}/, "a"], /* Mozilla bug 576822 */
+
+        [/(\2(a)){2}/, "aaa"], /* Mozilla bug 613820 */
 
         /* FIXME: also permit a object literal that has an expected value. */
     ];

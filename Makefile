@@ -1,6 +1,10 @@
 .PHONY: test
 test:
-	jsv -f common.js -f lzw.js -f unicat.js -f unicode.js -f log.js -f set.js -f parser.js -f matcher.js -f cdlre.js -e 'testParser(); testCDLRE();'
+	jsv -m -f common.js -f unicat.js -f unicode.js -f log.js -f set.js -f parser.js -f matcher.js -f cdlre.js -e 'testParser(); testCDLRE();'
+
+.PHONY: test_cdlre
+test_cdlre:
+	jsv -m -f common.js -f unicat.js -f unicode.js -f log.js -f set.js -f parser.js -f matcher.js -f cdlre.js -e 'testCDLRE();'
 
 .PHONY: hosted
 hosted:
