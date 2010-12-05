@@ -4,6 +4,8 @@
  * ECMAScripture.
  */
 
+assert(parseAlternative.BAD_START !== undefined, 'in cdlre.js');
+
 function GuestBuiltins() {
     var LOG = new Logger("RegExp");
 
@@ -26,6 +28,7 @@ function GuestBuiltins() {
             throw new Error("NYI");
         var P = pattern === undefined ? '' : ToString(pattern);
         var F = flags === undefined ? '' : ToString(flags);
+        assert(parseAlternative.BAD_START !== undefined, 'in RegExp');
         var ast = makeAST(P); // throws SyntaxError, per spec.
         assert(ast !== undefined);
         /* 
@@ -165,6 +168,7 @@ function checkMatchResults(targetName, target, guest) {
 }
 
 function testCDLRE() {
+    assert(parseAlternative.BAD_START !== undefined, 'in testCDLRE');
     var guestBuiltins = GuestBuiltins();
     var failCount = 0;
 
