@@ -146,3 +146,13 @@ function argsToArray(args) {
 function pfmt(format) {
     print(fmt.apply(null, [format].concat(argsToArray(arguments).slice(1))));
 }
+
+function extend(baseObj, extObj) {
+    for (var k in extObj) {
+        if (!extObj.hasOwnProperty(k))
+            continue;
+        assert(!baseObj.hasOwnProperty(k));
+        baseObj[k] = extObj[k];
+    }
+    return baseObj;
+}
