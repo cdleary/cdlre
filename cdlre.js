@@ -5,7 +5,9 @@
  */
 
 var cdlre = (function(cdlre) {
-    cdlre = cdlre || {};
+    var extend = cdlre.extend,
+        CompiledProcedure = cdlre.CompiledProcedure,
+        MatchResult = cdlre.MatchResult;
 
     var log = new Logger("RegExp");
 
