@@ -27,9 +27,10 @@
                     var literal = eval(literalStr);
                     var guestRE = cdlre.fromHostRE(literal);
                     var guestResult = guestRE.exec(inputStr);
-                    output.value = cdlre.matchResultToString(guestResult);
+                    output.value = cdlre.matchToString(guestResult);
                 } catch (e) {
-                    output.value = e.toString();
+                    output.value = e.toString() + '\n';
+                    output.value += e.stack;
                 }
                 return false;
             }

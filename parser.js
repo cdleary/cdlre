@@ -10,7 +10,8 @@
 var cdlre = (function (cdlre) {
     var extend = cdlre.extend,
         ord = cdlre.ord,
-        identity = cdlre.identity;
+        identity = cdlre.identity,
+        assert = cdlre.assert;
 
     var BACKSLASH = '\\';
     var ZWNJ = '\u200c'; /* Zero width non-joiner. */

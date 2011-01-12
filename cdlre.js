@@ -7,7 +7,10 @@
 var cdlre = (function(cdlre) {
     var extend = cdlre.extend,
         CompiledProcedure = cdlre.CompiledProcedure,
-        MatchResult = cdlre.MatchResult;
+        MatchResult = cdlre.MatchResult,
+        makeAST = cdlre.makeAST,
+        assert = cdlre.assert,
+        fmt = cdlre.fmt;
 
     var log = new Logger("RegExp");
 
@@ -30,7 +33,7 @@ var cdlre = (function(cdlre) {
     function matchToString(match) {
         var pieces = ['{'];
         'index input length'.split(' ').forEach(function(attr) {
-            pieces.push(fmt('{}: {}, ', attr, match[attr]));
+            pieces.push(fmt('{}: {!r}, ', attr, match[attr]));
         });
         pieces.push('[')
         for (var i = 0; i < match.length; ++i)
@@ -133,8 +136,13 @@ var cdlre = (function(cdlre) {
 
     RegExp.prototype.constructor = RegExp;
 
+    function fromHostRE(hostRE) {
+        return new RegExp(hostRE.source, hostRE.flags);
+    }
+
     return extend(cdlre, {
         RegExp: RegExp,
         matchToString: matchToString,
+        fromHostRE: fromHostRE,
     });
 })(cdlre);

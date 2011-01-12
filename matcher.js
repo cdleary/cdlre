@@ -11,7 +11,8 @@ var cdlre = (function(cdlre) {
         ord = cdlre.ord,
         chr = cdlre.chr,
         Assertion = cdlre.parser.Assertion,
-        ClassRanges = cdlre.parser.ClassRanges;
+        ClassRanges = cdlre.parser.ClassRanges,
+        assert = cdlre.assert;
 
     // Matcher(State, Continuation) -> MatchResult
     // type MatchResult = State | FAILURE
