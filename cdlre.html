@@ -19,6 +19,11 @@
                 output.value += '\n';
             }
 
+            function clearOutput() {
+                var output = document.getElementById('re-output');
+                output.value = '';
+            }
+
             function runRegExp() {
                 var literalStr = document.getElementById('re-literal').value;
                 var inputStr = document.getElementById('re-input').value;
@@ -50,6 +55,7 @@
             <input id='re-input' />
             <br />
             <input type='submit' value='Run' />
+            <input type='submit' value='Clear' onclick='clearOutput(); return false' />
             <br />
             <div class='full-textarea'>
                 <textarea id='re-output' cols='80' rows='24' value=''></textarea>
