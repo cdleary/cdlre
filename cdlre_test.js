@@ -1,4 +1,6 @@
 function checkMatchResults(name1, result1, name2, result2) {
+    var pfmt = cdlre.pfmt;
+
     if ((result1 === null) !== (result2 === null)) {
         pfmt("MISMATCH: {}: {}; {}: {}", name1, uneval(result1), name2, uneval(result2));
         return false;
@@ -36,6 +38,9 @@ function checkMatchResults(name1, result1, name2, result2) {
 }
 
 function testCDLRE() {
+    var assert = cdlre.assert,
+        fmt = cdlre.fmt,
+        pfmt = cdlre.pfmt;
     var failCount = 0;
 
     function checkFlags(flags) {

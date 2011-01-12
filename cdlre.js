@@ -127,17 +127,21 @@ var cdlre = (function(cdlre) {
         return match !== null;
     };
 
+    function flagsToStr(obj) {
+        return obj.global ? 'g' : ''
+            + obj.ignoreCase ? 'i' : ''
+            + obj.multiline ? 'm' : '';
+    }
+
     RegExp.prototype.toString = function() {
-        return '/' + this.source + '/'
-            + this.global ? 'g' : ''
-            + this.ignoreCase ? 'i' : ''
-            + this.multiline ? 'm' : '';
+        return '/' + this.source + '/' + flagsToStr(this);
     };
 
     RegExp.prototype.constructor = RegExp;
 
     function fromHostRE(hostRE) {
-        return new RegExp(hostRE.source, hostRE.flags);
+        var flags = flagsToStr(hostRE);
+        return new RegExp(hostRE.source, flagsToStr(hostRE));
     }
 
     return extend(cdlre, {
