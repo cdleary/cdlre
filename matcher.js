@@ -140,8 +140,21 @@ var cdlre = (function(cdlre) {
                     return false;
                 return LINE_TERMINATOR.has(self.input[e]);
             };
+        } else if (assertion.kind === 'ZeroWidthPositive') {
+            var m = self.evalDisjunction(assertion.disjunction);
+            return function assertionTester(x, c) {
+                function d(x) { return x; }
+                var r = m(x, d);
+                if (r === MatchResult.FAILURE)
+                    return r;
+                var y = r;
+                var cap = y.captures;
+                var xe = x.endIndex;
+                var z = self.State(xe, cap);
+                return c(z);
+            };
         } else {
-            throw new Error("NYI");
+            throw new Error("NYI: " + assertion);
         }
     };
 
