@@ -27,10 +27,9 @@
                     var literal = eval(literalStr);
                     var guestRE = cdlre.fromHostRE(literal);
                     var guestResult = guestRE.exec(inputStr);
-                    output.value = cdlre.matchToString(guestResult);
+                    print(cdlre.matchToString(guestResult));
                 } catch (e) {
-                    output.value = e.toString() + '\n';
-                    output.value += e.stack;
+                    cdlre.pfmt('{}\n{}', e, e.stack);
                 }
                 return false;
             }
