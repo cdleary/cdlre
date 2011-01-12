@@ -1,76 +1,45 @@
-function checkMatchResults(name1, result1, name2, result2) {
-    var pfmt = cdlre.pfmt;
+var cdlre = (function(cdlre) {
+    var extend = cdlre.extend,
+        checkFlags = cdlre.checkFlags,
+        assert = cdlre.assert;
 
-    if ((result1 === null) !== (result2 === null)) {
-        pfmt("MISMATCH: {}: {}; {}: {}", name1, uneval(result1), name2, uneval(result2));
-        return false;
-    }
+    function checkMatchResults(name1, result1, name2, result2) {
+        var pfmt = cdlre.pfmt;
 
-    if ((result1 === null) && (result2 === null))
-        return true;
+        if ((result1 === null) !== (result2 === null)) {
+            pfmt("MISMATCH: {}: {}; {}: {}", name1, uneval(result1), name2, uneval(result2));
+            return false;
+        }
 
-    function check(attr) {
-        var value1 = result1[attr];
-        var value2 = result2[attr];
-        if (value1 === value2)
+        if ((result1 === null) && (result2 === null))
             return true;
 
-        pfmt('MISMATCH: {} != {}', name1, name2);
-        pfmt('\tkey: {}', attr);
-        pfmt('\t\t{}: {!r}', name1, value1);
-        pfmt('\t\t{}: {!r}', name2, value2);
-        pfmt('\tmatch:');
-        pfmt('\t\t{}: {}', name1, cdlre.matchToString(result1));
-        pfmt('\t\t{}: {}', name2, cdlre.matchToString(result2));
-        return false;
-    };
-    var attrs = ['length', 'index', /* FIXME 'input' */];
-    for (var i = 0; i < attrs.length; ++i) {
-        var attr = attrs[i];
-        if (!check(attr))
+        function check(attr) {
+            var value1 = result1[attr];
+            var value2 = result2[attr];
+            if (value1 === value2)
+                return true;
+
+            pfmt('MISMATCH: {} != {}', name1, name2);
+            pfmt('\tkey: {}', attr);
+            pfmt('\t\t{}: {!r}', name1, value1);
+            pfmt('\t\t{}: {!r}', name2, value2);
+            pfmt('\tmatch:');
+            pfmt('\t\t{}: {}', name1, cdlre.matchToString(result1));
+            pfmt('\t\t{}: {}', name2, cdlre.matchToString(result2));
             return false;
-    }
-    for (var i = 0; i < result2.length; ++i) {
-        if (!check(i))
-            return false;
-    }
-    return true;
-}
-
-function testCDLRE() {
-    var assert = cdlre.assert,
-        fmt = cdlre.fmt,
-        pfmt = cdlre.pfmt;
-    var failCount = 0;
-
-    function checkFlags(flags) {
-        assert(flags !== undefined ? flags.match(/^[igym]{0,4}$/) : true, flags);
-    }
-
-    /**
-     * Produce a flags string or undefined, corresponding to the flags set on
-     * |re|.
-     */
-    function extractFlags(re) {
-        var flags = [(re.ignoreCase ? 'i' : ''),
-                     (re.multiline ? 'm' : ''),
-                     (re.sticky ? 'y' : ''),
-                     (re.global ? 'g' : '')].join('');
-        return flags.length === 0 ? undefined : flags;
-    }
-
-    function fail(pattern, flags, input) {
-        checkFlags(flags);
-        var literal = uneval(new RegExp(pattern, flags));
-        var input = uneval(input);
-        print("FAIL:"
-              + "\n\tliteral: " + literal
-              + "\n\tpattern: " + uneval(pattern)
-              + "\n\tflags:   " + uneval(flags)
-              + "\n\tinput:   " + input
-              + "\n\tcode:    " + literal + '.exec(' + input + ')'
-              + "\n");
-        failCount += 1;
+        };
+        var attrs = ['length', 'index', /* FIXME 'input' */];
+        for (var i = 0; i < attrs.length; ++i) {
+            var attr = attrs[i];
+            if (!check(attr))
+                return false;
+        }
+        for (var i = 0; i < result2.length; ++i) {
+            if (!check(i))
+                return false;
+        }
+        return true;
     }
 
     function compileAndExecGuest(pattern, flags, input) {
@@ -86,6 +55,20 @@ function testCDLRE() {
         }
         assert(guestResult !== undefined);
         return guestResult;
+    }
+
+    function fail(pattern, flags, input) {
+        checkFlags(flags);
+        var literal = uneval(new RegExp(pattern, flags));
+        var input = uneval(input);
+        print("FAIL:"
+              + "\n\tliteral: " + literal
+              + "\n\tpattern: " + uneval(pattern)
+              + "\n\tflags:   " + uneval(flags)
+              + "\n\tinput:   " + input
+              + "\n\tcode:    " + literal + '.exec(' + input + ')'
+              + "\n");
+        throw new Error('failure');
     }
 
     function compileAndExecHost(pattern, flags, input) {
@@ -118,13 +101,41 @@ function testCDLRE() {
             fail(pattern, flags, input);
     }
 
+    return extend(cdlre, {
+        test: {
+            compileAndExecGuest: compileAndExecGuest,
+            checkAgainstHost: checkAgainstHost,
+            checkMatchResults: checkMatchResults,
+        },
+    });
+})(cdlre);
+
+function testCDLRE() {
+    var assert = cdlre.assert,
+        fmt = cdlre.fmt,
+        pfmt = cdlre.pfmt,
+        checkFlags = cdlre.checkFlags;
+    var failCount = 0;
+
+    /**
+     * Produce a flags string or undefined, corresponding to the flags set on
+     * |re|.
+     */
+    function extractFlags(re) {
+        var flags = [(re.ignoreCase ? 'i' : ''),
+                     (re.multiline ? 'm' : ''),
+                     (re.sticky ? 'y' : ''),
+                     (re.global ? 'g' : '')].join('');
+        return flags.length === 0 ? undefined : flags;
+    }
+
     function checkAgainstSpec(pattern, flags, input, specResult) {
         checkFlags(flags);
-        var guestResult = compileAndExecGuest(pattern, flags, input);
+        var guestResult = cdlre.test.compileAndExecGuest(pattern, flags, input);
         if (guestResult === undefined) /* Failure. */
             return;
 
-        if (!checkMatchResults('spec', specResult, 'guest', guestResult))
+        if (!cdlre.test.checkMatchResults('spec', specResult, 'guest', guestResult))
             fail(pattern, flags, input);
     }
 
@@ -329,19 +340,22 @@ function testCDLRE() {
             input = test[1];
             pattern = test[0];
             flags = '';
-            checker = checkAgainstHost;
+            checker = cdlre.test.checkAgainstHost;
         } else {
             input = test[1];
             pattern = test[0].source;
             flags = extractFlags(test[0]);
-            checker = checkAgainstHost;
+            checker = cdlre.test.checkAgainstHost;
         }
 
         try {
             checker(pattern, flags, input, result);
         } catch (e) {
-            print(e.stack);
-            throw e;
+            failCount += 1;
+            if (e.message !== 'failure') {
+                print(e.stack);
+                throw e;
+            }
         }
     }
     var end = new Date();

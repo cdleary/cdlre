@@ -127,26 +127,43 @@ var cdlre = (function(cdlre) {
         return match !== null;
     };
 
-    function flagsToStr(obj) {
-        return obj.global ? 'g' : ''
-            + obj.ignoreCase ? 'i' : ''
-            + obj.multiline ? 'm' : '';
+    function flagsToString(obj) {
+        return (obj.global ? 'g' : '')
+            + (obj.ignoreCase ? 'i' : '')
+            + (obj.multiline ? 'm' : '');
     }
 
     RegExp.prototype.toString = function() {
-        return '/' + this.source + '/' + flagsToStr(this);
+        return '/' + this.source + '/' + flagsToString(this);
     };
 
     RegExp.prototype.constructor = RegExp;
 
     function fromHostRE(hostRE) {
-        var flags = flagsToStr(hostRE);
-        return new RegExp(hostRE.source, flagsToStr(hostRE));
+        var flags = flagsToString(hostRE);
+        return new RegExp(hostRE.source, flagsToString(hostRE));
+    }
+
+    function runRegExp(hostRE, inputStr) {
+        try {
+            var guestRE = fromHostRE(hostRE);
+            var guestResult = guestRE.exec(inputStr);
+            print(cdlre.matchToString(guestResult));
+        } catch (e) {
+            cdlre.pfmt('{}\n{}', e, e.stack);
+        }
+    }
+
+    function checkFlags(flags) {
+        assert(flags !== undefined ? flags.match(/^[igym]{0,4}$/) : true, flags);
     }
 
     return extend(cdlre, {
         RegExp: RegExp,
         matchToString: matchToString,
         fromHostRE: fromHostRE,
+        runRegExp: runRegExp,
+        flagsToString: flagsToString,
+        checkFlags: checkFlags,
     });
 })(cdlre);

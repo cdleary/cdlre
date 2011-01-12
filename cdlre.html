@@ -24,19 +24,30 @@
                 output.value = '';
             }
 
-            function runRegExp() {
+            function getLiteralAndInput() {
                 var literalStr = document.getElementById('re-literal').value;
                 var inputStr = document.getElementById('re-input').value;
-                var output = document.getElementById('re-output');
+                print('Evaluating literal string: ', literalStr);
+                var literal = eval(literalStr);
+                return [literal, inputStr];
+            }
+
+            function runRegExp() {
+                cdlre.runRegExp.apply(null, getLiteralAndInput());
+            }
+
+            function checkAgainstHost() {
+                var tup = getLiteralAndInput();
+                var literal = tup[0];
+                var input = tup[1];
                 try {
-                    var literal = eval(literalStr);
-                    var guestRE = cdlre.fromHostRE(literal);
-                    var guestResult = guestRE.exec(inputStr);
-                    print(cdlre.matchToString(guestResult));
+                    cdlre.test.checkAgainstHost(literal.source, cdlre.flagsToString(literal), input);
                 } catch (e) {
-                    cdlre.pfmt('{}\n{}', e, e.stack);
+                    if (e.message !== 'failure') {
+                        pfmt('{}\n{}', e, e.stack);
+                        throw e;
+                    }
                 }
-                return false;
             }
         </script>
         <style type='text/css'>
@@ -54,8 +65,9 @@
             <label for='re-input'>RegExp input</label>
             <input id='re-input' />
             <br />
-            <input type='submit' value='Run' />
-            <input type='submit' value='Clear' onclick='clearOutput(); return false' />
+            <input type='submit' value='Clear Output' onclick='clearOutput(); return false;' />
+            <input type='submit' value='Run' onclick='runRegExp(); return false;'/>
+            <input type='submit' value='Versus Host' onclick='checkAgainstHost(); return false;' />
             <br />
             <div class='full-textarea'>
                 <textarea id='re-output' cols='80' rows='24' value=''></textarea>
