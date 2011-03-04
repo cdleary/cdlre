@@ -227,6 +227,7 @@ function testCDLRE() {
         [/a*h/, 'blah'],
         [/(a(.|[^d])c)*/, "adcaxc"],
         [/(())?/, ''],
+        [/\b/, 'abc'],
 
         // Logged.
         [/.+/, "abcdefghijklmnopqrstuvwxyz"],

@@ -153,6 +153,13 @@ var cdlre = (function(cdlre) {
                 var z = self.State(xe, cap);
                 return c(z);
             };
+        } else if (assertion === Assertion.WB) {
+            return function assertionTester(x) {
+                var e = x.endIndex;
+                var a = self.isWordChar(e - 1);
+                var b = self.isWordChar(e);
+                return Boolean(a ^ b);
+            };
         } else {
             throw new Error("NYI: " + assertion);
         }
@@ -389,6 +396,29 @@ var cdlre = (function(cdlre) {
             return c(y);
         };
     };
+
+    ProcedureBuilder.prototype.isWordChar = function(e) {
+        var self = this;
+        if (e === -1 || e === self.inputLength)
+            return false;
+        var c = self.input[e];
+        var co = ord(c);
+        // Note: spec needs a lowercase a here.
+        var ranges = [
+            ['a', 'z'],
+            ['A', 'Z'],
+            ['0', '9'],
+            ['_', '_'],
+        ];
+        for (var i in ranges) {
+            if (!ranges.hasOwnProperty(i))
+                continue;
+            var range = ranges[i];
+            if (ord(range[0]) <= co && co <= ord(range[1]))
+                return true;
+        }
+        return false;
+    }
 
     ProcedureBuilder.prototype.repeatMatcher = function(m, min, max, greedy, x, c,
                                                         parenIndex, parenCount) {
