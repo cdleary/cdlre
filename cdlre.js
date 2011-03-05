@@ -158,7 +158,75 @@ var cdlre = (function(cdlre) {
         assert(flags !== undefined ? flags.match(/^[igym]{0,4}$/) : true, flags);
     }
 
+    function String(wrapped) {
+        log.warn('String constructor not implemented for realsies!');
+        this.wrapped = wrapped;
+    }
+
+    String.prototype.split = function String_split(separator, limit) {
+        var self = this;
+        log.warn('skipping some stuff in String.prototype.split');
+        var S = ToString(self.wrapped);
+        var A = new Array();
+        var lengthA = 0;
+        // Note the change to "lim" here...
+        if (limit === undefined) {
+            var lim = 1 << 31 + ((1 << 31) - 1);
+        } else {
+            throw new Error("NYI: ToUint32");
+        }
+        var s = S.length;
+        var p = 0;
+        if (!(separator instanceof RegExp))
+            throw new Error("NYI: can only handle RegExp as [[Class]]");
+        var R = separator;
+        if (lim === 0)
+            return A;
+        if (separator === undefined || s === 0)
+            throw new Error("NYI");
+        var q = p;
+        while (q !== s) {
+            var z = SplitMatch(R, S, 0)
+            if (z === MatchResult.FAILURE) {
+                q += 1;
+                continue;
+            }
+            var e = z.endIndex;
+            var cap = z.captures;
+            if (e === p) {
+                q += 1;
+                continue;
+            }
+            var T = S.substr(p, q - p);
+            A[ToString(lengthA)] = T;
+            lengthA += 1;
+            if (lengthA === lim)
+                return A;
+            p = e;
+            var i = 0;
+            while (i !== cap.length) {
+                i += 1;
+                A[ToString(lengthA)] = cap[i];
+                lengthA += 1;
+                if (A.length === lim)
+                    return A;
+            }
+            q = p;
+        }
+        var T = S.substr(p, s - p);
+        A[ToString(lengthA)] = T;
+        return A;
+    };
+
+    // Note: seems like the spec param order is wrong here.
+    function SplitMatch(R, S, q) {
+        if (!(R instanceof RegExp))
+            throw new Error("NYI");
+        return R.__match(S, q);
+    }
+
     return extend(cdlre, {
+        String: String,
         RegExp: RegExp,
         matchToString: matchToString,
         fromHostRE: fromHostRE,
