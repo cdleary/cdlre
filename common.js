@@ -50,6 +50,12 @@ if (typeof Function.prototype.bind === 'undefined')
 var cdlre = (function(cdlre) {
     cdlre = cdlre || {};
 
+    function inBrowser() {
+        if (typeof CDLRE_IN_BROWSER !== 'undefined')
+            return Boolean(CDLRE_IN_BROWSER);
+        return typeof window === 'object' && window.window === window;
+    }
+
     function assert(cond, msg) {
         if (cond)
             return;
@@ -180,5 +186,6 @@ var cdlre = (function(cdlre) {
         juxtapose: juxtapose,
         pprint: pprint,
         identity: identity,
+        inBrowser: inBrowser,
     });
 })(cdlre);

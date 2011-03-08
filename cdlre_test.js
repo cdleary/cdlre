@@ -88,11 +88,6 @@ var cdlre = (function(cdlre) {
         };
     }
 
-    function checkMatchResults(aname, aresult, bname, bresult) {
-        var cliDiffCallback = makeCLIDiffCallback(aname, bname);
-        return compareMatchResults(aresult, bresult, cliDiffCallback);
-    }
-
     /*************
      * Test Case *
      *************/
@@ -144,12 +139,12 @@ var cdlre = (function(cdlre) {
         return hostResult;
     };
 
-    TestCase.prototype.run = function() {
+    TestCase.prototype.run = function(successCallback) {
         if (this.result !== undefined)
             throw new Error("NYI");
         var guestResult = this.runGuest();
         var hostResult = this.runHost();
-        return checkMatchResults('guest', guestResult, 'host', hostResult);
+        return compareMatchResults(guestResult, hostResult, successCallback);
     };
 
     TestCase.fromDescriptor = function(desc) {
@@ -197,16 +192,14 @@ var cdlre = (function(cdlre) {
         return new TestSuite(cases);
     };
 
-    TestSuite.prototype.run = function() {
+    TestSuite.prototype.run = function(successCallback) {
         for (var i = 0; i < this.cases.length; ++i) {
             var tc = this.cases[i];
-            var success = tc.run();
+            var success = tc.run(successCallback);
             if (success) {
                 this.successes += 1;
             } else {
                 this.failures += 1;
-                tc.pprint();
-                print();
             }
         }
     };
@@ -214,11 +207,12 @@ var cdlre = (function(cdlre) {
     return extend(cdlre, {
         test: {
             TestSuite: TestSuite,
+            makeCLIDiffCallback: makeCLIDiffCallback,
         },
     });
 })(cdlre);
 
-function testCDLRE() {
+function testCDLRE(successCallback) {
     var assert = cdlre.assert,
         fmt = cdlre.fmt,
         pfmt = cdlre.pfmt,
@@ -414,7 +408,7 @@ function testCDLRE() {
     ];
 
     var suite = TestSuite.fromDescriptors(tests);
-    suite.run();
+    suite.run(successCallback);
     pfmt('Successes: {}', suite.successes);
     pfmt('Failures:  {}', suite.failures);
 
