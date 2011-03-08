@@ -11,12 +11,29 @@
         <script type='text/javascript' src='cdlre/matcher.js'></script>
         <script type='text/javascript' src='cdlre/cdlre.js'></script>
         <script type='text/javascript' src='cdlre/cdlre_test.js'></script>
+        <script type='text/javascript' src='http://ajax.googleapis.com/ajax/libs/jquery/1.5.1/jquery.min.js'></script>
         <script type='text/javascript'>
+            /*
             function print() {
                 var output = document.getElementById('re-output');
                 for (var i = 0; i < arguments.length; ++i)
                     output.value += arguments[i];
                 output.value += '\n';
+            }
+            */
+
+            function logStack() {
+                try {
+                    throw new Error();
+                } catch (e) {
+                    var lines = e.stack.toString().split(/\n/);
+                    for (var i = 0; i < lines.length; ++i)
+                        console.log(lines[i]);
+                }
+            }
+
+            function print() {
+                logStack();
             }
 
             function clearOutput() {
@@ -49,38 +66,102 @@
                     }
                 }
             }
+
+            function runRegression() {
+                $('#regression-button').hide();
+                var results = testCDLRE(function handleResult(data) {
+                    var reason = data.reason;
+                    if (reason === 'attr') {
+                        $("#regression-results").append($(
+                            '<div class="failed-result result">' +
+                                data.pattern +
+                            '</div>'
+                        ));
+                    } else if (reason === 'success') {
+                        $('#regression-results').append($(
+                            '<div class="successful-result result">' +
+                                data.pattern +
+                            '</div>'
+                        ));
+                    } else {
+                        throw new Error('NYI: ' + reason);
+                    }
+                });
+                $('#regression-stats').append($('<span>Success: ' + results.successes + '</span><br />'));
+                $('#regression-stats').append($('<span>Failure: ' + results.failures + '</span><br />'));
+                $('#regression-stats').append($('<span>Host exec time: ' + results.hostExecTime + '</span><br />'));
+                $('#regression-stats').append($('<span>Guest exec time: ' + results.guestExecTime + '</span>'));
+            }
         </script>
         <style type='text/css'>
+            body {
+                font-family: Helvetica, Arial, sans-serif;
+            }
             .full-textarea textarea {
                 font-family: monospace;
                 width: 100%;
             }
+            #body-container {
+                margin-left: auto;
+                margin-right: auto;
+                margin-top: 200px;
+                text-align: center;
+            }
+            #regression-button>input {
+                font-size: 24pt;
+            }
+            #regression-results {
+                width: 500px;
+                margin: auto;
+            }
+            #regression-results>div.result {
+                padding: 3px;
+                margin: 5px;
+                font-family: monospace;
+            }
+            #regression-results>div.failed-result {
+                background-color: #cc0000;
+            }
+            #regression-results>div.successful-result {
+                background-color: #00cc00;
+            }
         </style>
     </head>
     <body>
-        <form onsubmit='return runRegExp();'>
-            <label for='re-literal'>RegExp literal</label>
-            <input id='re-literal' value='//' />
-            <br />
-            <label for='re-input'>RegExp input</label>
-            <input id='re-input' />
-            <br />
-            <label for='re-operation'>RegExp operation</label>
-            <input name='re-operation' type='radio' value='match'>Match</input>
-            <input name='re-operation' type='radio' value='split'>Split</input>
-            <br />
-            <input type='submit' value='Clear Output' onclick='clearOutput(); return false;' />
-            <input type='submit' value='Run' onclick='runRegExp(); return false;'/>
-            <input type='submit' value='Versus Host' onclick='checkAgainstHost(); return false;' />
-            <br />
-            <div class='full-textarea'>
-                <textarea id='re-output' cols='80' rows='24' value=''></textarea>
+        <div id='body-container'>
+            <!--<form onsubmit='return runRegExp();'>
+                <label for='re-literal'>RegExp literal</label>
+                <input id='re-literal' value='//' />
+                <br />
+                <label for='re-input'>RegExp input</label>
+                <input id='re-input' />
+                <br />
+                <label for='re-operation'>RegExp operation</label>
+                <input name='re-operation' type='radio' value='match'>Match</input>
+                <input name='re-operation' type='radio' value='split'>Split</input>
+                <br />
+                <input type='submit' value='Clear Output' onclick='clearOutput(); return false;' />
+                <input type='submit' value='Run' onclick='runRegExp(); return false;'/>
+                <input type='submit' value='Versus Host' onclick='checkAgainstHost(); return false;' />
+                <br />
+                <div class='full-textarea'>
+                    <textarea id='re-output' cols='80' rows='24' value=''></textarea>
+                </div>
+            </form>-->
+            <!--<script type='text/javascript'>
+                var output = document.getElementById('re-output');
+                output.value = '';
+                testCDLRE();
+            </script>-->
+            <div id='regression-container'>
+                <div id='regression-button'>
+                    <input type='submit' value='RegExp regression' onclick='runRegression(); return false' />
+                </div>
+                <div id='regression-results'>
+                    <div id='regression-stats'>
+                    </div>
+                </div>
             </div>
-        </form>
-        <script type='text/javascript'>
-            var output = document.getElementById('re-output');
-            output.value = '';
-            testCDLRE();
-        </script>
+        </div>
     </body>
 </html>

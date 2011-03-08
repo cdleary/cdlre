@@ -17,9 +17,6 @@ var cdlre = (function(cdlre) {
 
     /**
      * Compare two regexp match results.
-     *
-     * When a difference between the match results is found, `diffCallback` is
-     * invoked with the relevant information.
      */
     function compareMatchResults(a, b, diffCallback) {
         function cbk(data) {
@@ -61,6 +58,7 @@ var cdlre = (function(cdlre) {
                 return false;
         }
 
+        cbk({reason: 'success'});
         return true;
     }
 
@@ -99,6 +97,8 @@ var cdlre = (function(cdlre) {
         this.input = input;
         this.op = op;
         this.result = result;
+        this.hostExecTime = undefined;
+        this.guestExecTime = undefined;
     }
 
     TestCase.prototype.literal = function() {
@@ -124,7 +124,10 @@ var cdlre = (function(cdlre) {
         var guestRE = new cdlre.RegExp(this.pattern, this.flags);
         if (this.op !== 'exec')
             throw new Error('NYI');
+        var start = new Date();
         var guestResult = guestRE.exec(this.input);
+        var end = new Date();
+        this.guestExecTime = end - start;
         return guestResult;
     };
 
@@ -135,15 +138,33 @@ var cdlre = (function(cdlre) {
         var hostRE = new RegExp(this.pattern, this.flags);
         if (this.op !== 'exec')
             throw new Error('NYI');
+        var start = new Date();
         var hostResult = hostRE.exec(this.input);
+        var end = new Date();
+        this.hostExecTime = end - start;
         return hostResult;
     };
 
     TestCase.prototype.run = function(successCallback) {
+        var self = this;
         if (this.result !== undefined)
             throw new Error("NYI");
         var guestResult = this.runGuest();
         var hostResult = this.runHost();
+
+        if (successCallback !== undefined) {
+            var wrappedSuccessCallback = successCallback;
+            successCallback = function(data) {
+                data = extend(data, {
+                    pattern: self.pattern,
+                    flags: self.flags,
+                    input: self.input,
+                    op: self.op,
+                });
+                return wrappedSuccessCallback(data);
+            };
+        }
+
         return compareMatchResults(guestResult, hostResult, successCallback);
     };
 
@@ -183,6 +204,8 @@ var cdlre = (function(cdlre) {
         this.cases = cases;
         this.successes = 0;
         this.failures = 0;
+        this.hostExecTime = 0;
+        this.guestExecTime = 0;
     }
 
     TestSuite.fromDescriptors = function(descs) {
@@ -197,6 +220,8 @@ var cdlre = (function(cdlre) {
             var tc = this.cases[i];
             var success = tc.run(successCallback);
             if (success) {
+                this.hostExecTime += tc.hostExecTime;
+                this.guestExecTime += tc.guestExecTime;
                 this.successes += 1;
             } else {
                 this.failures += 1;
@@ -409,50 +434,10 @@ function testCDLRE(successCallback) {
 
     var suite = TestSuite.fromDescriptors(tests);
     suite.run(successCallback);
-    pfmt('Successes: {}', suite.successes);
-    pfmt('Failures:  {}', suite.failures);
-
-    /*
-    var start = new Date();
-    for (var i = 0; i < tests.length; ++i) {
-        assert(tests[i] !== undefined, fmt('test {} is undefined, after {!r}', i, tests[i - 1]));
-        var test = tests[i];
-        var pattern, flags, input, result, checker;
-        if (typeof test === 'object' && test.re !== undefined) {
-            input = test.str;
-            pattern = test.re.source;
-            flags = extractFlags(test.re);
-            result = test.result;
-            checker = cdlre.test.checkAgainstSpec;
-        } else if (typeof test[0] === 'string') {
-            input = test[1];
-            pattern = test[0];
-            flags = '';
-            checker = cdlre.test.checkAgainstHost;
-        } else {
-            input = test[1];
-            pattern = test[0].source;
-            flags = extractFlags(test[0]);
-            checker = cdlre.test.checkAgainstHost;
-        }
-
-        try {
-            checker(pattern, flags, input, result);
-        } catch (e) {
-            failCount += 1;
-            if (e.message !== 'failure') {
-                print(e.stack);
-                throw e;
-            }
-        }
-    }
-    var end = new Date();
-
-    if (failCount)
-        pfmt("FAILED {}/{}", failCount, tests.length);
-    else
-        pfmt("PASSED {0}/{0}", tests.length);
-
-    pfmt("Test time: {}s", (end - start) / 1000);
-    */
+    return {
+        successes: suite.successes,
+        failures: suite.failures,
+        hostExecTime: suite.hostExecTime,
+        guestExecTime: suite.guestExecTime,
+    };
 }
