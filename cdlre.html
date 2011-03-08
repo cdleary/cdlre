@@ -69,6 +69,7 @@
 
             function runRegression() {
                 $('#regression-button').hide();
+                $('#engine-button').hide();
                 var results = testCDLRE(function handleResult(data) {
                     var reason = data.reason;
                     if (reason === 'attr') {
@@ -89,8 +90,8 @@
                 });
                 $('#regression-stats').append($('<span>Success: ' + results.successes + '</span><br />'));
                 $('#regression-stats').append($('<span>Failure: ' + results.failures + '</span><br />'));
-                $('#regression-stats').append($('<span>Host exec time: ' + results.hostExecTime + '</span><br />'));
-                $('#regression-stats').append($('<span>Guest exec time: ' + results.guestExecTime + '</span>'));
+                $('#regression-stats').append($('<span>Host exec time: ' + results.hostExecTime + ' ms</span><br />'));
+                $('#regression-stats').append($('<span>Guest exec time: ' + results.guestExecTime + ' ms</span>'));
             }
         </script>
         <style type='text/css'>
@@ -104,11 +105,18 @@
             #body-container {
                 margin-left: auto;
                 margin-right: auto;
-                margin-top: 200px;
                 text-align: center;
+            }
+            #engine-button>input {
+                margin-top: 200px;
+                font-size: 24pt;
+                padding: 10px;
+                width: 350px;
             }
             #regression-button>input {
                 font-size: 24pt;
+                padding: 10px;
+                width: 350px;
             }
             #regression-results {
                 width: 500px;
@@ -153,6 +161,11 @@
                 output.value = '';
                 testCDLRE();
             </script>-->
+            <div id='engine-container'>
+                <div id='engine-button'>
+                    <input type='submit' value='RegExp engine' onclick='showEngine(); return false' />
+                </div>
+            </div>
             <div id='regression-container'>
                 <div id='regression-button'>
                     <input type='submit' value='RegExp regression' onclick='runRegression(); return false' />

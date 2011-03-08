@@ -147,10 +147,19 @@ var cdlre = (function(cdlre) {
 
     TestCase.prototype.run = function(successCallback) {
         var self = this;
-        if (this.result !== undefined)
-            throw new Error("NYI");
         var guestResult = this.runGuest();
         var hostResult = this.runHost();
+
+        /* 
+         * The problem here is that there are two things to test: guest versus
+         * host and host versus spec. Ideally, the guest is always to spec, so
+         * we should be comparing the host to the spec.
+         */
+        if (this.result !== undefined) {
+            var result = extend(this.result, {input: self.input});
+            if (!compareMatchResults(guestResult, result, successCallback))
+                throw new Error("assertion failure; guest must match spec");
+        }
 
         if (successCallback !== undefined) {
             var wrappedSuccessCallback = successCallback;
@@ -160,6 +169,7 @@ var cdlre = (function(cdlre) {
                     flags: self.flags,
                     input: self.input,
                     op: self.op,
+                    result: self.result,
                 });
                 return wrappedSuccessCallback(data);
             };
@@ -255,19 +265,19 @@ function testCDLRE(successCallback) {
     ];
 
     var tests = [
-//        /* 15.10.2.5 Term Note 2 */
-//        {re: /a[a-z]{2,4}/, op: 'exec', str: 'abcdefghi',
-//         result: {0: 'abcde', index: 0, length: 1}},
-//        {re: /a[a-z]{2,4}?/, op: 'exec', str: 'abcdefghi',
-//         result: {0: 'abc', index: 0, length: 1}},
-//        {re: /(aa|aabaac|ba|b|c)*/, op: 'exec', str: 'aabaac',
-//         result: {0: 'aaba', 1: 'ba', index: 0, length: 2}},
-//        //"aaaaaaaaaa,aaaaaaaaaaaaaaa".replace(/^(a+)\1*,\1+$/,"$1")
-//
-//        /* 15.10.2.5 Term Note 3 */
-//        {re: /(z)((a+)?(b+)?(c))*/, op: 'exec', str: 'zaacbbbcac',
-//         result: {0: "zaacbbbcac", 1: "z", 2: "ac", 3: "a", 4: undefined, 5: "c",
-//                  index: 0, length: 6}},
+        /* 15.10.2.5 Term Note 2 */
+        {re: /a[a-z]{2,4}/, op: 'exec', str: 'abcdefghi',
+         result: {0: 'abcde', index: 0, length: 1}},
+        {re: /a[a-z]{2,4}?/, op: 'exec', str: 'abcdefghi',
+         result: {0: 'abc', index: 0, length: 1}},
+        {re: /(aa|aabaac|ba|b|c)*/, op: 'exec', str: 'aabaac',
+         result: {0: 'aaba', 1: 'ba', index: 0, length: 2}},
+        //"aaaaaaaaaa,aaaaaaaaaaaaaaa".replace(/^(a+)\1*,\1+$/,"$1")
+
+        /* 15.10.2.5 Term Note 3 */
+        {re: /(z)((a+)?(b+)?(c))*/, op: 'exec', str: 'zaacbbbcac',
+         result: {0: "zaacbbbcac", 1: "z", 2: "ac", 3: "a", 4: undefined, 5: "c",
+                  index: 0, length: 6}},
 
         [/.+/, "...."],
         [/[^]/, "/"],
