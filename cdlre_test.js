@@ -1,111 +1,219 @@
+/**
+ * The testing space is as follows:
+ *
+ * - Guest: The CDLRE regexp engine.
+ * - Host: The hosting VM regexp engine.
+ * - Spec: The definitively correct results, as given by the specification.
+ *
+ * Ideally, all of these categories should produce the same results.
+ */
+
 var cdlre = (function(cdlre) {
     var extend = cdlre.extend,
         checkFlags = cdlre.checkFlags,
-        assert = cdlre.assert;
+        extractFlags = cdlre.extractFlags,
+        assert = cdlre.assert,
+        pfmt = cdlre.pfmt;
 
-    function checkMatchResults(name1, result1, name2, result2) {
-        var pfmt = cdlre.pfmt;
+    /**
+     * Compare two regexp match results.
+     *
+     * When a difference between the match results is found, `diffCallback` is
+     * invoked with the relevant information.
+     */
+    function compareMatchResults(a, b, diffCallback) {
+        function cbk(data) {
+            if (diffCallback === undefined)
+                return;
+            if (!data.hasOwnProperty('reason'))
+                throw new Error('must have a reason');
+            diffCallback(extend(data, {a: a, b: b}));
+        }
 
-        if ((result1 === null) !== (result2 === null)) {
-            pfmt("MISMATCH: {}: {}; {}: {}", name1, uneval(result1), name2, uneval(result2));
+        if ((a === null) !== (b === null)) {
+            cbk({reason: 'nullness'});
             return false;
         }
 
-        if ((result1 === null) && (result2 === null))
+        if ((a === null) && (b === null))
             return true;
 
-        function check(attr) {
-            var value1 = result1[attr];
-            var value2 = result2[attr];
-            if (value1 === value2)
+        function chk(attr) {
+            var aval = a[attr];
+            var bval = b[attr];
+            if (aval === bval)
                 return true;
-
-            pfmt('MISMATCH: {} != {}', name1, name2);
-            pfmt('\tkey: {}', attr);
-            pfmt('\t\t{}: {!r}', name1, value1);
-            pfmt('\t\t{}: {!r}', name2, value2);
-            pfmt('\tmatch:');
-            pfmt('\t\t{}: {}', name1, cdlre.matchToString(result1));
-            pfmt('\t\t{}: {}', name2, cdlre.matchToString(result2));
+            
+            cbk({reason: 'attr', attr: attr, aval: aval, bval: bval});
             return false;
-        };
-        var attrs = ['length', 'index', /* FIXME 'input' */];
+        }
+
+        var attrs = ['length', 'index', 'input'];
         for (var i = 0; i < attrs.length; ++i) {
             var attr = attrs[i];
-            if (!check(attr))
+            if (!chk(attr))
                 return false;
         }
-        for (var i = 0; i < result2.length; ++i) {
-            if (!check(i))
+
+        /* Lengths known to be same at this point. */
+        for (var i = 0; i < b.length; ++i) {
+            if (!chk(i))
                 return false;
         }
+
         return true;
     }
 
-    function compileAndExecGuest(pattern, flags, input) {
-        checkFlags(flags);
-        try {
-            var guestRE = new cdlre.RegExp(pattern, flags);
-            var guestResult = guestRE.exec(input);
-        } catch (e) {
-            pfmt("CAUGHT: {}", e);
-            pfmt("STACK:  {}", e.stack);
-            fail(pattern, flags, input);
-            return;
-        }
-        assert(guestResult !== undefined);
-        return guestResult;
+    function makeCLIDiffCallback(aname, bname) {
+        return function cliDiffCallback(data) {
+            var reason = data['reason'];
+            var a = data['a'];
+            var b = data['b'];
+            if (reason === 'nullness') {
+                pfmt("MISMATCH: {}: {}; {}: {}", aname, uneval(a), bname, uneval(b));
+            } else if (reason === 'attr') {
+                var attr = data['attr'];
+                var aval = data['aval'];
+                var bval = data['bval'];
+                pfmt('MISMATCH: {} != {}', aname, bname);
+                pfmt('\tkey: {}', attr);
+                pfmt('\t\t{}: {!r}', aname, aval);
+                pfmt('\t\t{}: {!r}', bname, bval);
+                pfmt('\tmatch:');
+                pfmt('\t\t{}: {}', aname, cdlre.matchToString(a, '\n\t\t\t'));
+                pfmt('\t\t{}: {}', bname, cdlre.matchToString(b, '\n\t\t\t'));
+            } else {
+                throw new Error('unhandled reason: ' + reason);
+            }
+        };
     }
 
-    function fail(pattern, flags, input) {
-        checkFlags(flags);
-        var literal = uneval(new RegExp(pattern, flags));
-        var input = uneval(input);
-        print("FAIL:"
-              + "\n\tliteral: " + literal
-              + "\n\tpattern: " + uneval(pattern)
-              + "\n\tflags:   " + uneval(flags)
-              + "\n\tinput:   " + input
-              + "\n\tcode:    " + literal + '.exec(' + input + ')'
-              + "\n");
-        throw new Error('failure');
+    function checkMatchResults(aname, aresult, bname, bresult) {
+        var cliDiffCallback = makeCLIDiffCallback(aname, bname);
+        return compareMatchResults(aresult, bresult, cliDiffCallback);
     }
 
-    function compileAndExecHost(pattern, flags, input) {
+    /*************
+     * Test Case *
+     *************/
+
+    function TestCase(pattern, flags, input, op, result) {
         checkFlags(flags);
-        try {
-            var hostRE = new RegExp(pattern, flags);
-        } catch (e) {
-            pfmt("CAUGHT: {}", e);
-            pfmt("STACK:  {}", e.stack);
-            fail(pattern, flags, input);
-            return;
-        }
-        var hostResult = hostRE.exec(input);
-        return hostResult;
+        this.pattern = pattern;
+        this.flags = flags;
+        this.input = input;
+        this.op = op;
+        this.result = result;
     }
+
+    TestCase.prototype.literal = function() {
+        return uneval(new RegExp(this.pattern, this.flags));
+    };
+
+    TestCase.prototype.pprint = function(prefix) {
+        if (prefix === undefined)
+            prefix = '';
+
+        pfmt('{}literal: {}', prefix, this.literal());
+        pfmt('{}pattern: {!r}', prefix, this.pattern);
+        pfmt('{}flags:   {!r}', prefix, this.flags);
+        pfmt('{}input:   {!r}', prefix, this.input);
+        pfmt('{}op:      {!r}', prefix, this.op);
+        pfmt('{}result:  {}', prefix, this.result);
+    };
 
     /**
-     * Check that the regexp given by pattern/flags execs, given input, to the
-     * same thing as the host platform.
+     * Warning: may throw.
      */
-    function checkAgainstHost(pattern, flags, input) {
-        checkFlags(flags);
-        var guestResult = compileAndExecGuest(pattern, flags, input);
-        if (guestResult === undefined) /* Failure. */
-            return;
-        var hostResult = compileAndExecHost(pattern, flags, input);
+    TestCase.prototype.runGuest = function() {
+        var guestRE = new cdlre.RegExp(this.pattern, this.flags);
+        if (this.op !== 'exec')
+            throw new Error('NYI');
+        var guestResult = guestRE.exec(this.input);
+        return guestResult;
+    };
 
-        /* Compare guest and host. */
-        if (!checkMatchResults('host', hostResult, 'guest', guestResult))
-            fail(pattern, flags, input);
+    /**
+     * Warning: may throw.
+     */
+    TestCase.prototype.runHost = function() {
+        var hostRE = new RegExp(this.pattern, this.flags);
+        if (this.op !== 'exec')
+            throw new Error('NYI');
+        var hostResult = hostRE.exec(this.input);
+        return hostResult;
+    };
+
+    TestCase.prototype.run = function() {
+        if (this.result !== undefined)
+            throw new Error("NYI");
+        var guestResult = this.runGuest();
+        var hostResult = this.runHost();
+        return checkMatchResults('guest', guestResult, 'host', hostResult);
+    };
+
+    TestCase.fromDescriptor = function(desc) {
+        if (typeof desc === 'object' && typeof desc.re !== 'undefined') {
+            var re = desc.re;
+            var pattern = re.source;
+            var flags = extractFlags(re);
+            var input = desc.str;
+            var op = desc.op;
+            var result = desc.result;
+            return new TestCase(pattern, flags, input, op, result);
+        } else if (typeof desc[0].source !== 'undefined') {
+            /* Two-tuple of regexp, input. The op is implicitly exec. */
+            var re = desc[0];
+            var pattern = re.source;
+            var flags = extractFlags(re);
+            var input = desc[1];
+            var op = 'exec';
+            return new TestCase(pattern, flags, input, op);
+        } else if (typeof desc[0] == 'string') {
+            var pattern = desc[0];
+            var flags = '';
+            var input = desc[1];
+            var op = 'exec';
+            return new TestCase(pattern, flags, input, op);
+        } else {
+            throw new Error("unhandled descriptor: " + uneval(desc));
+        }
+    };
+
+    /**************
+     * Test Suite *
+     **************/
+
+    function TestSuite(cases) {
+        this.cases = cases;
+        this.successes = 0;
+        this.failures = 0;
     }
+
+    TestSuite.fromDescriptors = function(descs) {
+        var cases = [];
+        for (var i = 0; i < descs.length; ++i)
+            cases.push(TestCase.fromDescriptor(descs[i]));
+        return new TestSuite(cases);
+    };
+
+    TestSuite.prototype.run = function() {
+        for (var i = 0; i < this.cases.length; ++i) {
+            var tc = this.cases[i];
+            var success = tc.run();
+            if (success) {
+                this.successes += 1;
+            } else {
+                this.failures += 1;
+                tc.pprint();
+                print();
+            }
+        }
+    };
 
     return extend(cdlre, {
         test: {
-            compileAndExecGuest: compileAndExecGuest,
-            checkAgainstHost: checkAgainstHost,
-            checkMatchResults: checkMatchResults,
+            TestSuite: TestSuite,
         },
     });
 })(cdlre);
@@ -114,30 +222,9 @@ function testCDLRE() {
     var assert = cdlre.assert,
         fmt = cdlre.fmt,
         pfmt = cdlre.pfmt,
-        checkFlags = cdlre.checkFlags;
+        checkFlags = cdlre.checkFlags,
+        TestSuite = cdlre.test.TestSuite;
     var failCount = 0;
-
-    /**
-     * Produce a flags string or undefined, corresponding to the flags set on
-     * |re|.
-     */
-    function extractFlags(re) {
-        var flags = [(re.ignoreCase ? 'i' : ''),
-                     (re.multiline ? 'm' : ''),
-                     (re.sticky ? 'y' : ''),
-                     (re.global ? 'g' : '')].join('');
-        return flags.length === 0 ? undefined : flags;
-    }
-
-    function checkAgainstSpec(pattern, flags, input, specResult) {
-        checkFlags(flags);
-        var guestResult = cdlre.test.compileAndExecGuest(pattern, flags, input);
-        if (guestResult === undefined) /* Failure. */
-            return;
-
-        if (!cdlre.test.checkMatchResults('spec', specResult, 'guest', guestResult))
-            fail(pattern, flags, input);
-    }
 
     var disabledTests = [
         // TODO: use digits in quantifier range that overflow the 32/64b space.
@@ -149,19 +236,19 @@ function testCDLRE() {
     ];
 
     var tests = [
-        /* 15.10.2.5 Term Note 2 */
-        {re: /a[a-z]{2,4}/, op: 'exec', str: 'abcdefghi',
-         result: {0: 'abcde', index: 0, length: 1}},
-        {re: /a[a-z]{2,4}?/, op: 'exec', str: 'abcdefghi',
-         result: {0: 'abc', index: 0, length: 1}},
-        {re: /(aa|aabaac|ba|b|c)*/, op: 'exec', str: 'aabaac',
-         result: {0: 'aaba', 1: 'ba', index: 0, length: 2}},
-        //"aaaaaaaaaa,aaaaaaaaaaaaaaa".replace(/^(a+)\1*,\1+$/,"$1")
-
-        /* 15.10.2.5 Term Note 3 */
-        {re: /(z)((a+)?(b+)?(c))*/, op: 'exec', str: 'zaacbbbcac',
-         result: {0: "zaacbbbcac", 1: "z", 2: "ac", 3: "a", 4: undefined, 5: "c",
-                  index: 0, length: 6}},
+//        /* 15.10.2.5 Term Note 2 */
+//        {re: /a[a-z]{2,4}/, op: 'exec', str: 'abcdefghi',
+//         result: {0: 'abcde', index: 0, length: 1}},
+//        {re: /a[a-z]{2,4}?/, op: 'exec', str: 'abcdefghi',
+//         result: {0: 'abc', index: 0, length: 1}},
+//        {re: /(aa|aabaac|ba|b|c)*/, op: 'exec', str: 'aabaac',
+//         result: {0: 'aaba', 1: 'ba', index: 0, length: 2}},
+//        //"aaaaaaaaaa,aaaaaaaaaaaaaaa".replace(/^(a+)\1*,\1+$/,"$1")
+//
+//        /* 15.10.2.5 Term Note 3 */
+//        {re: /(z)((a+)?(b+)?(c))*/, op: 'exec', str: 'zaacbbbcac',
+//         result: {0: "zaacbbbcac", 1: "z", 2: "ac", 3: "a", 4: undefined, 5: "c",
+//                  index: 0, length: 6}},
 
         [/.+/, "...."],
         [/[^]/, "/"],
@@ -326,6 +413,12 @@ function testCDLRE() {
         /* FIXME: also permit a object literal that has an expected value. */
     ];
 
+    var suite = TestSuite.fromDescriptors(tests);
+    suite.run();
+    pfmt('Successes: {}', suite.successes);
+    pfmt('Failures:  {}', suite.failures);
+
+    /*
     var start = new Date();
     for (var i = 0; i < tests.length; ++i) {
         assert(tests[i] !== undefined, fmt('test {} is undefined, after {!r}', i, tests[i - 1]));
@@ -336,7 +429,7 @@ function testCDLRE() {
             pattern = test.re.source;
             flags = extractFlags(test.re);
             result = test.result;
-            checker = checkAgainstSpec;
+            checker = cdlre.test.checkAgainstSpec;
         } else if (typeof test[0] === 'string') {
             input = test[1];
             pattern = test[0];
@@ -367,4 +460,5 @@ function testCDLRE() {
         pfmt("PASSED {0}/{0}", tests.length);
 
     pfmt("Test time: {}s", (end - start) / 1000);
+    */
 }

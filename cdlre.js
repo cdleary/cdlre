@@ -15,7 +15,11 @@ var cdlre = (function(cdlre) {
     var log = new Logger("RegExp");
 
     /** Approximation of the ToString used in the spec. */
-    function ToString(o) { return new String(o).toString(); }
+    function ToString(o) {
+        if (typeof o === 'string')
+            return o;
+        return o.toString();
+    }
 
     /** Return a {flag: count} mapping. */
     function countFlags(flags) {
@@ -30,10 +34,11 @@ var cdlre = (function(cdlre) {
         return flagToCount;
     }
 
-    function matchToString(match) {
+    function matchToString(match, sep) {
+        sep = sep === undefined ? ' ' : sep;
         var pieces = ['{'];
         'index input length'.split(' ').forEach(function(attr) {
-            pieces.push(fmt('{}: {!r}, ', attr, match[attr]));
+            pieces.push(fmt('{}: {!r},{}', attr, match[attr], sep));
         });
         pieces.push('[')
         for (var i = 0; i < match.length; ++i)
@@ -155,6 +160,7 @@ var cdlre = (function(cdlre) {
     }
 
     function checkFlags(flags) {
+        // TODO: arent' duplicate flags supposed to assert?
         assert(flags !== undefined ? flags.match(/^[igym]{0,4}$/) : true, flags);
     }
 
@@ -225,6 +231,18 @@ var cdlre = (function(cdlre) {
         return R.__match(S, q);
     }
 
+    /**
+     * Produce a flags string or undefined, corresponding to the flags set on
+     * |re|.
+     */
+    function extractFlags(re) {
+        var flags = [(re.ignoreCase ? 'i' : ''),
+                     (re.multiline ? 'm' : ''),
+                     (re.sticky ? 'y' : ''),
+                     (re.global ? 'g' : '')].join('');
+        return flags.length === 0 ? undefined : flags;
+    }
+
     return extend(cdlre, {
         String: String,
         RegExp: RegExp,
@@ -233,5 +251,6 @@ var cdlre = (function(cdlre) {
         runRegExp: runRegExp,
         flagsToString: flagsToString,
         checkFlags: checkFlags,
+        extractFlags: extractFlags,
     });
 })(cdlre);
