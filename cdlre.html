@@ -77,12 +77,14 @@
                         throw new Error();
                     if (!patternToDiv.hasOwnProperty(pattern)) {
                         var div = $('<div class="successful-result result">' + pattern + '</div>');
-                        $('#regression-results').append(div);
+                        $('#regression-patterns').append(div);
                         patternToDiv[pattern] = div;
                     }
                     var div = patternToDiv[pattern];
-                    if (isFailure)
+                    if (isFailure) {
                         div.removeClass('successful-result').addClass('failed-result');
+                        $('#regression-patterns').prepend(div);
+                    }
                 }
 
                 var results = testCDLRE(function handleResult(data) {
@@ -129,15 +131,15 @@
                 width: 500px;
                 margin: auto;
             }
-            #regression-results>div.result {
+            #regression-patterns>div.result {
                 padding: 3px;
                 margin: 5px;
                 font-family: monospace;
             }
-            #regression-results>div.failed-result {
+            #regression-patterns>div.failed-result {
                 background-color: #aa0011;
             }
-            #regression-results>div.successful-result {
+            #regression-patterns>div.successful-result {
                 background-color: #00cc11;
             }
         </style>
@@ -179,6 +181,8 @@
                 </div>
                 <div id='regression-results'>
                     <div id='regression-stats'>
+                    </div>
+                    <div id='regression-patterns'>
                     </div>
                 </div>
             </div>
