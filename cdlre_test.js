@@ -157,7 +157,7 @@ var cdlre = (function(cdlre) {
          */
         if (this.result !== undefined) {
             var result = extend(this.result, {input: self.input});
-            if (!compareMatchResults(guestResult, result, successCallback))
+            if (!compareMatchResults(guestResult, result))
                 throw new Error("assertion failure; guest must match spec");
         }
 

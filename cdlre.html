@@ -70,20 +70,27 @@
             function runRegression() {
                 $('#regression-button').hide();
                 $('#engine-button').hide();
+                var patternToDiv = {};
+
+                function getOrColorDiv(pattern, isFailure) {
+                    if (pattern === undefined)
+                        throw new Error();
+                    if (!patternToDiv.hasOwnProperty(pattern)) {
+                        var div = $('<div class="successful-result result">' + pattern + '</div>');
+                        $('#regression-results').append(div);
+                        patternToDiv[pattern] = div;
+                    }
+                    var div = patternToDiv[pattern];
+                    if (isFailure)
+                        div.removeClass('successful-result').addClass('failed-result');
+                }
+
                 var results = testCDLRE(function handleResult(data) {
                     var reason = data.reason;
                     if (reason === 'attr') {
-                        $("#regression-results").append($(
-                            '<div class="failed-result result">' +
-                                data.pattern +
-                            '</div>'
-                        ));
+                        getOrColorDiv(data.pattern, true);
                     } else if (reason === 'success') {
-                        $('#regression-results').append($(
-                            '<div class="successful-result result">' +
-                                data.pattern +
-                            '</div>'
-                        ));
+                        getOrColorDiv(data.pattern, false);
                     } else {
                         throw new Error('NYI: ' + reason);
                     }
@@ -128,10 +135,10 @@
                 font-family: monospace;
             }
             #regression-results>div.failed-result {
-                background-color: #cc0000;
+                background-color: #aa0011;
             }
             #regression-results>div.successful-result {
-                background-color: #00cc00;
+                background-color: #00cc11;
             }
         </style>
     </head>
