@@ -67,9 +67,18 @@
                 }
             }
 
-            function runRegression() {
+            function hideButtons() {
                 $('#regression-button').hide();
                 $('#engine-button').hide();
+            }
+
+            function showEngine() {
+                hideButtons();
+                $('#engine-input').show();
+            }
+
+            function runRegression() {
+                hideButtons();
                 var patternToDiv = {};
 
                 function getOrColorDiv(pattern, isFailure) {
@@ -122,6 +131,9 @@
                 padding: 10px;
                 width: 350px;
             }
+            #engine-input {
+                display: none;
+            }
             #regression-button>input {
                 font-size: 24pt;
                 padding: 10px;
@@ -173,6 +185,16 @@
             <div id='engine-container'>
                 <div id='engine-button'>
                     <input type='submit' value='RegExp engine' onclick='showEngine(); return false' />
+                </div>
+                <div id='engine-input'>
+                    <form>
+                        <label for='source'>RegExp:</label>
+                        <input name='source' value='RegExp source' /><br />
+                        <label for='text'>Text:</label>
+                        <input name='text' value='Text' /><br />
+                        <label for='operation'>Operation:</label>
+                        <input name='operation' type='radio' value='exec'>exec</input>
+                    </form>
                 </div>
             </div>
             <div id='regression-container'>
