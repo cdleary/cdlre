@@ -18,12 +18,10 @@ Make targets
 ------------
 
 ``make test``
-
     Runs the entire test suite. Right now this is parser and evaluation
     (matcher) tests.
 
 ``make hosted``
-
     Creates a directory structure that can be used for in-browser testing. If
     you subsequently run:
 
