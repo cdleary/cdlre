@@ -8,6 +8,19 @@ of certain regular expression evaluations. It could also be used in a
 metacircular interpreter.
 
 
+Goals
+-----
+
+- Be capable of visualizing (or at least dumping out) the ECMAScript standard
+  steps taken in matching a regular expression.
+- Be capable of enabling/disabling the de-facto quirks from various browsers
+  which are not yet part of the standard.
+- Be capable of running a thorough regression suite against the host regular
+  expression engine (presumably with a set of permitted quirk options).
+- Keep the JS code a direct translation from the spec where possible and
+  practical.
+
+
 Requirements
 ------------
 
