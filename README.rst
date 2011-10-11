@@ -3,9 +3,12 @@
 ============================================================
 
 
-This library is intended to help check the ECMAScript specification conformity
-of certain regular expression evaluations. It could also be used in a
-metacircular interpreter.
+This library is intended to help check the `ECMAScript specification`__
+conformity of regular expression evaluations.
+
+It could also be used in a metacircular interpreter.
+
+__ http://www.ecmascript.org/docs.php
 
 
 Goals
