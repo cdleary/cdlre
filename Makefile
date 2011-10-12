@@ -17,11 +17,11 @@ CDLRE_TEST_ARGS := $(addprefix -f ,$(CDLRE_TEST))
 
 .PHONY: test
 test:
-	$(JS_SHELL) $(CDLRE_LIB_ARGS) $(CDLRE_TEST_ARGS) -e 'testParser(); testCDLRE();'
+	$(JS_SHELL) $(CDLRE_LIB_ARGS) $(CDLRE_TEST_ARGS) -e 'testParser(); cliTestCDLRE();'
 
 .PHONY: test_cdlre
 test_cdlre:
-	$(JS_SHELL) $(CDLRE_LIB_ARGS) $(CDLRE_TEST_ARGS) -e 'testCDLRE();'
+	$(JS_SHELL) $(CDLRE_LIB_ARGS) $(CDLRE_TEST_ARGS) -e 'cliTestCDLRE();'
 
 .PHONY: hosted
 hosted:

@@ -145,7 +145,7 @@ var cdlre = (function(cdlre) {
         return hostResult;
     };
 
-    TestCase.prototype.run = function(successCallback) {
+    TestCase.prototype.run = function(resultCallback) {
         var self = this;
         var guestResult = this.runGuest();
         var hostResult = this.runHost();
@@ -158,12 +158,16 @@ var cdlre = (function(cdlre) {
         if (this.result !== undefined) {
             var result = extend(this.result, {input: self.input});
             if (!compareMatchResults(guestResult, result))
-                throw new Error("assertion failure; guest must match spec");
+                throw new Error("internal error; guest must match spec");
         }
 
-        if (successCallback !== undefined) {
-            var wrappedSuccessCallback = successCallback;
-            successCallback = function(data) {
+        if (resultCallback !== undefined) {
+            var wrappedResultCallback = resultCallback;
+            resultCallback = function(data) {
+                data.guest = data.a;
+                data.host = data.b;
+                delete data.a;
+                delete data.b;
                 data = extend(data, {
                     pattern: self.pattern,
                     flags: self.flags,
@@ -171,11 +175,11 @@ var cdlre = (function(cdlre) {
                     op: self.op,
                     result: self.result,
                 });
-                return wrappedSuccessCallback(data);
+                return wrappedResultCallback(data);
             };
         }
 
-        return compareMatchResults(guestResult, hostResult, successCallback);
+        return compareMatchResults(guestResult, hostResult, resultCallback);
     };
 
     TestCase.fromDescriptor = function(desc) {
@@ -225,10 +229,10 @@ var cdlre = (function(cdlre) {
         return new TestSuite(cases);
     };
 
-    TestSuite.prototype.run = function(successCallback) {
+    TestSuite.prototype.run = function(resultCallback) {
         for (var i = 0; i < this.cases.length; ++i) {
             var tc = this.cases[i];
-            var success = tc.run(successCallback);
+            var success = tc.run(resultCallback);
             if (success) {
                 this.hostExecTime += tc.hostExecTime;
                 this.guestExecTime += tc.guestExecTime;
@@ -247,7 +251,7 @@ var cdlre = (function(cdlre) {
     });
 })(cdlre);
 
-function testCDLRE(successCallback) {
+function testCDLRE(resultCallback) {
     var assert = cdlre.assert,
         fmt = cdlre.fmt,
         pfmt = cdlre.pfmt,
@@ -439,15 +443,36 @@ function testCDLRE(successCallback) {
 
         [/(\2(a)){2}/, "aaa"], /* Mozilla bug 613820 */
 
-        /* FIXME: also permit a object literal that has an expected value. */
+        [/(?:first (\d) |second (\d) |third (\d) ){3}/, "first 1 second 2 third 3 "], /* Mozilla bug 692441 */
+
+        /* FIXME: also permit an object literal that has an expected value. */
     ];
 
     var suite = TestSuite.fromDescriptors(tests);
-    suite.run(successCallback);
+    suite.run(resultCallback);
     return {
         successes: suite.successes,
         failures: suite.failures,
         hostExecTime: suite.hostExecTime,
         guestExecTime: suite.guestExecTime,
     };
+}
+
+function cliTestCDLRE() {
+    var madeDot = false;
+    function onResult(data) {
+        if (data.reason === 'success') {
+            putstr('.');
+            madeDot = true;
+            return;
+        }
+        if (madeDot) {
+            print();
+            madeDot = false;
+        }
+        print((uneval(data)));
+    }
+    testCDLRE(onResult);
+    if (madeDot)
+        print();
 }
