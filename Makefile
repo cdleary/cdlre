@@ -1,16 +1,19 @@
 JS_SHELL := jsv -m -n
 CDLRE_UNICODE := generated/unicode.js
 CDLRE_UNICODE_LZW := generated/unicode_lzw.js
-CDLRE_LIB_ARGS := \
-	-f lib/common.js \
-	-f $(CDLRE_UNICODE) \
-	-f lib/unicode.js \
-	-f lib/log.js \
-	-f lib/set.js \
-	-f lib/parser.js \
-	-f lib/matcher.js \
-	-f lib/cdlre.js
-CDLRE_TEST_ARGS := -f test/parser_test.js -f test/cdlre_test.js
+CDLRE_LIB := \
+	lib/common.js \
+	lib/unicode.js \
+	lib/log.js \
+	lib/set.js \
+	lib/parser.js \
+	lib/matcher.js \
+	lib/cdlre.js
+CDLRE_LIB_ARGS := $(addprefix -f ,$(CDLRE_LIB)) -f $(CDLRE_UNICODE)
+CDLRE_TEST := \
+	test/parser_test.js \
+	test/cdlre_test.js
+CDLRE_TEST_ARGS := $(addprefix -f ,$(CDLRE_TEST))
 
 .PHONY: test
 test:
@@ -22,17 +25,12 @@ test_cdlre:
 
 .PHONY: hosted
 hosted:
-	mkdir -p hosted/cdlre
-	ln -s ${PWD}/cdlre.html     hosted/cdlre.html
-	ln -s ${PWD}/cdlre_test.js  hosted/cdlre/cdlre_test.js
-	ln -s ${PWD}/cdlre.js       hosted/cdlre/cdlre.js
-	ln -s ${PWD}/common.js      hosted/cdlre/common.js
-	ln -s ${PWD}/set.js         hosted/cdlre/set.js
-	ln -s ${PWD}/unicode.js     hosted/cdlre/unicode.js
-	ln -s ${PWD}/parser.js      hosted/cdlre/parser.js
-	ln -s ${PWD}/log.js         hosted/cdlre/log.js
-	ln -s ${PWD}/matcher.js     hosted/cdlre/matcher.js
-	ln -s ${PWD}/unicat.js      hosted/cdlre/unicat.js
+	$(shell mkdir -p hosted/lib hosted/generated hosted/test)
+	$(shell ln -s $(realpath web/cdlre.html) hosted)
+	$(foreach lib_item,$(CDLRE_LIB),$(shell ln -s $(realpath $(lib_item)) hosted/lib))
+	$(foreach test_item,$(CDLRE_TEST),$(shell ln -s $(realpath $(test_item)) hosted/test))
+	$(shell ln -s $(realpath $(CDLRE_UNICODE)) hosted/generated)
+	echo Done
 
 .PHONY: unicode
 unicode:
