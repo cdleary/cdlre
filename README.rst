@@ -6,7 +6,14 @@
 This library is intended to help check the `ECMAScript specification`__
 conformity of regular expression evaluations.
 
-It could also be used in a metacircular interpreter.
+There are a bunch of potential applications:
+
+- Regression testing the specification against host implementations.
+- Use in understanding why regular expressions succeed/fail to match.
+- Use in a metacircular interpreter.
+- Use as a staging ground for regular expression optimizations and/or a regular
+  expression compiler. (Such a compiler could target ``eval`` as a backend or a
+  JIT code execution foreign function.)
 
 __ http://www.ecmascript.org/docs.php
 
