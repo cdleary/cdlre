@@ -1,8 +1,12 @@
 #!/usr/bin/env python3
 
-"""Convert the union of several unicode categories to a single JS string."""
+"""
+Converts the union of several unicode categories to a single bitmask encoded as
+a JS string.
+"""
 
 import collections
+import os
 from subprocess import Popen
 
 TARGET_CATEGORIES = ['Mn', 'Mc', 'Nd', 'Pc', 'Lu', 'Ll', 'Lt', 'Lm', 'Lo', 'Nl']
@@ -10,7 +14,7 @@ TARGET_CATEGORIES = ['Mn', 'Mc', 'Nd', 'Pc', 'Lu', 'Ll', 'Lt', 'Lm', 'Lo', 'Nl']
 # Each index in the bitmap corresponds to a uint16,
 # because that's the best we can encode in a unicode character.
 bitmap = collections.defaultdict(int)
-with open('unicode_categories.txt') as file:
+with open(os.path.join('metadata', 'unicode_categories.txt')) as file:
     for line in file:
         hexcode, category, *rest = line.split()
         if category not in TARGET_CATEGORIES:

@@ -1,10 +1,24 @@
+JS_SHELL := jsv -m -n
+CDLRE_UNICODE := generated/unicode.js
+CDLRE_UNICODE_LZW := generated/unicode_lzw.js
+CDLRE_LIB_ARGS := \
+	-f lib/common.js \
+	-f $(CDLRE_UNICODE) \
+	-f lib/unicode.js \
+	-f lib/log.js \
+	-f lib/set.js \
+	-f lib/parser.js \
+	-f lib/matcher.js \
+	-f lib/cdlre.js
+CDLRE_TEST_ARGS := -f test/parser_test.js -f test/cdlre_test.js
+
 .PHONY: test
 test:
-	jsv -m -f common.js -f unicat.js -f unicode.js -f log.js -f set.js -f parser.js -f matcher.js -f cdlre.js -f parser_test.js -f cdlre_test.js -e 'testParser(); testCDLRE();'
+	$(JS_SHELL) $(CDLRE_LIB_ARGS) $(CDLRE_TEST_ARGS) -e 'testParser(); testCDLRE();'
 
 .PHONY: test_cdlre
 test_cdlre:
-	jsv -m -f common.js -f unicat.js -f unicode.js -f log.js -f set.js -f parser.js -f matcher.js -f cdlre.js -f parser_test.js -f cdlre_test.js -e 'testCDLRE();'
+	$(JS_SHELL) $(CDLRE_LIB_ARGS) $(CDLRE_TEST_ARGS) -e 'testCDLRE();'
 
 .PHONY: hosted
 hosted:
@@ -20,10 +34,15 @@ hosted:
 	ln -s ${PWD}/matcher.js     hosted/cdlre/matcher.js
 	ln -s ${PWD}/unicat.js      hosted/cdlre/unicat.js
 
+.PHONY: unicode
+unicode:
+	echo "var encIdentityEscape = " > $(CDLRE_UNICODE)
+	./tools/unicat.py >> $(CDLRE_UNICODE)
+	du -sh $(CDLRE_UNICODE)
+
+
 .PHONY: lzw
-lzw:
-	echo "var encIdentityEscape = " > unicat.js
-	./unicat.py >> unicat.js
-	jsv -f lzw.js -f unicat.js -e 'print("var encLZWIdentityEscape = ", uneval(LZW.encode(LZW.compress(encIdentityEscape))), ";")' > unicat_lzw.js
-	du -sh unicat.js
-	du -sh unicat_lzw.js
+lzw: unicode
+	$(JS_SHELL) -f lib/lzw.js -f $(CDLRE_UNICODE) -e 'print("var encLZWIdentityEscape = ", uneval(LZW.encode(LZW.compress(encIdentityEscape))), ";")' > $(CDLRE_UNICODE_LZW)
+	du -sh $(CDLRE_UNICODE)
+	du -sh $(CDLRE_UNICODE_LZW)
