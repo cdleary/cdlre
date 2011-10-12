@@ -59,3 +59,22 @@ Make targets
     You can navigate to the `local testing site`__ in your browser.
 
     __ http://localhost:8000/cdlre.html
+
+
+Directory structure
+-------------------
+
+lib/
+    The regular expression library
+
+test/
+    The regular expression library test suites
+
+tools/
+    For automatically generating unicode bitmaps from the specification
+
+generated/
+    Latest version of the generated unicode bitmaps
+
+web/
+    The page that gets installed via the ``make hosted`` target
