@@ -74,7 +74,7 @@
 
             function showEngine() {
                 hideButtons();
-                $('#engine-input').show();
+                $('#engine-container').show();
             }
 
             function runRegression() {
@@ -125,13 +125,26 @@
                 margin-right: auto;
                 text-align: center;
             }
-            #engine-button>input {
+            #button-container {
                 margin-top: 200px;
+            }
+            #engine-button>input {
                 font-size: 24pt;
                 padding: 10px;
                 width: 350px;
             }
-            #engine-input {
+            #engine-input table {
+                margin-left: auto;
+                margin-right: auto;
+            }
+            #engine-container {
+                display: none;
+                margin-top: 200px;
+            }
+            #engine-output {
+                margin-top: 30px;
+            }
+            #regression-container {
                 display: none;
             }
             #regression-button>input {
@@ -158,54 +171,43 @@
     </head>
     <body>
         <div id='body-container'>
-            <!--<form onsubmit='return runRegExp();'>
-                <label for='re-literal'>RegExp literal</label>
-                <input id='re-literal' value='//' />
-                <br />
-                <label for='re-input'>RegExp input</label>
-                <input id='re-input' />
-                <br />
-                <label for='re-operation'>RegExp operation</label>
-                <input name='re-operation' type='radio' value='match'>Match</input>
-                <input name='re-operation' type='radio' value='split'>Split</input>
-                <br />
-                <input type='submit' value='Clear Output' onclick='clearOutput(); return false;' />
-                <input type='submit' value='Run' onclick='runRegExp(); return false;'/>
-                <input type='submit' value='Versus Host' onclick='checkAgainstHost(); return false;' />
-                <br />
-                <div class='full-textarea'>
-                    <textarea id='re-output' cols='80' rows='24' value=''></textarea>
-                </div>
-            </form>-->
-            <!--<script type='text/javascript'>
-                var output = document.getElementById('re-output');
-                output.value = '';
-                testCDLRE();
-            </script>-->
             <div id='engine-container'>
-                <div id='engine-button'>
-                    <input type='submit' value='RegExp engine' onclick='showEngine(); return false' />
-                </div>
                 <div id='engine-input'>
-                    <form>
-                        <label for='source'>RegExp:</label>
-                        <input name='source' value='RegExp source' /><br />
-                        <label for='text'>Text:</label>
-                        <input name='text' value='Text' /><br />
-                        <label for='operation'>Operation:</label>
-                        <input name='operation' type='radio' value='exec'>exec</input>
+                    <form onsubmit='runRegExp(); return false;'>
+                        <table>
+                            <tr>
+                                <td><label for='source'>RegExp:</label></td>
+                                <td><input name='source' value='RegExp source' /></td>
+                            </tr>
+                            <tr>
+                                <td><label for='text'>Text:</label></td>
+                                <td><input name='text' value='Text' /></td>
+                            </tr>
+                            <tr>
+                                <td><label for='operation'>Operation:</label></td>
+                                <td><input name='operation' type='radio' value='exec'>exec</input></td>
+                            </tr>
+                        </table>
                     </form>
+                </div>
+                <div id='engine-output'>
+                    <textarea></textarea>
                 </div>
             </div>
             <div id='regression-container'>
-                <div id='regression-button'>
-                    <input type='submit' value='RegExp regression' onclick='runRegression(); return false' />
-                </div>
                 <div id='regression-results'>
                     <div id='regression-stats'>
                     </div>
                     <div id='regression-patterns'>
                     </div>
+                </div>
+            </div>
+            <div id='button-container'>
+                <div id='regression-button'>
+                    <input type='submit' value='RegExp regression' onclick='runRegression(); return false' />
+                </div>
+                <div id='engine-button'>
+                    <input type='submit' value='RegExp engine' onclick='showEngine(); return false' />
                 </div>
             </div>
         </div>
