@@ -13,15 +13,6 @@
         <script type='text/javascript' src='test/cdlre_test.js'></script>
         <script type='text/javascript' src='http://ajax.googleapis.com/ajax/libs/jquery/1.5.1/jquery.min.js'></script>
         <script type='text/javascript'>
-            /*
-            function print() {
-                var output = document.getElementById('re-output');
-                for (var i = 0; i < arguments.length; ++i)
-                    output.value += arguments[i];
-                output.value += '\n';
-            }
-            */
-
             function logStack() {
                 try {
                     throw new Error();
@@ -36,44 +27,23 @@
                 logStack();
             }
 
-            function clearOutput() {
-                var output = document.getElementById('re-output');
-                output.value = '';
-            }
-
-            function getLiteralAndInput() {
-                var literalStr = document.getElementById('re-literal').value;
-                var inputStr = document.getElementById('re-input').value;
-                var opStr = $('#engine-input>form input:radio[name=operation]:checked').val();
-                //print('Evaluating literal string: ', literalStr);
-                var literal = eval(literalStr);
-                return [literal, opStr, inputStr];
+            function getSource() { return $('#re-literal').val(); }
+            function getInput() { return $('#re-input').val(); }
+            function getOp() { return $('#engine-input>form input:checked').val(); }
+            function setSource(value) { $('#re-literal').val(value); }
+            function setInput(value) { $('#re-input').val(value); }
+            function setOp(value) {
+                $('#engine-input>form input:radio[name=operation]').filter('[value=' + value + ']').attr('checked', 'checked');
             }
 
             function runRegExp() {
-                var tup = getLiteralAndInput();
-                console.log(tup);
-                var hostRE = tup[0],
-                    opStr = tup[1],
-                    inputStr = tup[2];
+                var hostRE = eval(getSource());
+                var opStr = getOp();
+                var inputStr = getInput();
                 var guestRE = cdlre.fromHostRE(hostRE);
                 var guestResult = guestRE[opStr].call(guestRE, inputStr);
                 var outputStr = cdlre.matchToString(guestResult);
                 $('#engine-output>textarea').val(outputStr);
-            }
-
-            function checkAgainstHost() {
-                var tup = getLiteralAndInput();
-                var literal = tup[0];
-                var input = tup[1];
-                try {
-                    cdlre.test.checkAgainstHost(literal.source, cdlre.flagsToString(literal), input);
-                } catch (e) {
-                    if (e.message !== 'failure') {
-                        pfmt('{}\n{}', e, e.stack);
-                        throw e;
-                    }
-                }
             }
 
             function hideButtons() {
@@ -83,6 +53,14 @@
 
             function showEngine() {
                 hideButtons();
+                var qsParams = getQSParams();
+                function maybeSetQP(key, func) {
+                    if (qsParams[key] !== undefined)
+                        func(decodeURIComponent(qsParams[key]));
+                }
+                maybeSetQP('op', setOp);
+                maybeSetQP('input', setInput);
+                maybeSetQP('source', setSource);
                 $('#engine-container').show();
             }
 
@@ -119,6 +97,36 @@
                 $('#regression-stats').append($('<span>Failure: ' + results.failures + '</span><br />'));
                 $('#regression-stats').append($('<span>Host exec time: ' + results.hostExecTime + ' ms</span><br />'));
                 $('#regression-stats').append($('<span>Guest exec time: ' + results.guestExecTime + ' ms</span>'));
+            }
+
+            function _getQSParams() {
+                var qs = window.location['search'].substring(1); // Strip off leading '?'
+                var parts = qs.split('&');
+                var params = {};
+                for (var i = 0; i < parts.length; ++i) {
+                    var tup = parts[i].split('=');
+                    params[tup[0]] = tup[1];
+                }
+                return params;
+            }
+
+            var _qsParamsCache = null;
+            function getQSParams() {
+                if (_qsParamsCache)
+                    return _qsParamsCache;
+                return _qsParamsCache = _getQSParams();
+            }
+
+            /** Encode a query string with the source, input, and operation. */
+            function refreshPermalink() {
+                var host = window.location['origin'] + window.location['pathname'];
+                var pieces = [host, '?',
+                              'kind=engine&',
+                              'source=', encodeURIComponent(getSource()), '&',
+                              'input=', encodeURIComponent(getInput()), '&',
+                              'op=', encodeURIComponent(getOp())];
+                var uri = pieces.join('');
+                $('#engine-permalink-uri').val(uri);
             }
         </script>
         <style type='text/css'>
@@ -162,6 +170,16 @@
                 width: 480px;
                 height: 200px;
             }
+            #engine-permalink {
+                margin-top: 25px;
+                font-size: 9pt;
+            }
+            #engine-permalink input {
+                font-size: 9pt;
+            }
+            #engine-permalink-uri {
+                width: 200px;
+            }
             #regression-container {
                 display: none;
             }
@@ -187,7 +205,7 @@
             }
         </style>
     </head>
-    <body>
+    <body onload='if (getQSParams()["kind"] === "engine") showEngine();'>
         <div id='body-container'>
             <div id='engine-container'>
                 <div id='engine-input'>
@@ -195,7 +213,7 @@
                         <table>
                             <tr>
                                 <td><label for='source'>RegExp:</label></td>
-                                <td><input name='source' id='re-literal' value='/(?:)/' /></td>
+                                <td><input name='source' id='re-literal' value='/(?:)/'></input></td>
                             </tr>
                             <tr>
                                 <td><label for='text'>Text:</label></td>
@@ -204,7 +222,7 @@
                             <tr>
                                 <td><label for='operation'>Operation:</label></td>
                                 <td>
-                                    <input name='operation' type='radio' value='exec' checked='yes'>exec</input>
+                                    <input name='operation' type='radio' value='exec' checked='checked'>exec</input>
                                     <input name='operation' type='radio' value='test'>test</input>
                                 </td>
                             </tr>
@@ -219,6 +237,11 @@
                 <div id='engine-output'>
                     <textarea></textarea>
                 </div>
+		<div id='engine-permalink'>
+                    <label for='permalink'>Permalink:</label>
+                    <input name='permalink' id='engine-permalink-uri' value='None'></input>
+                    <input type='submit' value='Refresh' onclick='refreshPermalink(); return false'></input>
+		</div>
             </div>
             <div id='regression-container'>
                 <div id='regression-results'>
