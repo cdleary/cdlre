@@ -44,13 +44,22 @@
             function getLiteralAndInput() {
                 var literalStr = document.getElementById('re-literal').value;
                 var inputStr = document.getElementById('re-input').value;
-                print('Evaluating literal string: ', literalStr);
+                var opStr = $('#engine-input>form input:radio[name=operation]:checked').val();
+                //print('Evaluating literal string: ', literalStr);
                 var literal = eval(literalStr);
-                return [literal, inputStr];
+                return [literal, opStr, inputStr];
             }
 
             function runRegExp() {
-                cdlre.runRegExp.apply(null, getLiteralAndInput());
+                var tup = getLiteralAndInput();
+                console.log(tup);
+                var hostRE = tup[0],
+                    opStr = tup[1],
+                    inputStr = tup[2];
+                var guestRE = cdlre.fromHostRE(hostRE);
+                var guestResult = guestRE[opStr].call(guestRE, inputStr);
+                var outputStr = cdlre.matchToString(guestResult);
+                $('#engine-output>textarea').val(outputStr);
             }
 
             function checkAgainstHost() {
@@ -136,6 +145,11 @@
             #engine-input table {
                 margin-left: auto;
                 margin-right: auto;
+		text-align: left;
+            }
+            #engine-input #run-button {
+                padding-top: 10px;
+                text-align: center;
             }
             #engine-container {
                 display: none;
@@ -143,6 +157,10 @@
             }
             #engine-output {
                 margin-top: 30px;
+            }
+            #engine-output>textarea {
+                width: 480px;
+                height: 200px;
             }
             #regression-container {
                 display: none;
@@ -173,19 +191,27 @@
         <div id='body-container'>
             <div id='engine-container'>
                 <div id='engine-input'>
-                    <form onsubmit='runRegExp(); return false;'>
+                    <form onsubmit='return false'>
                         <table>
                             <tr>
                                 <td><label for='source'>RegExp:</label></td>
-                                <td><input name='source' value='RegExp source' /></td>
+                                <td><input name='source' id='re-literal' value='/(?:)/' /></td>
                             </tr>
                             <tr>
                                 <td><label for='text'>Text:</label></td>
-                                <td><input name='text' value='Text' /></td>
+                                <td><input name='text' id='re-input' value='sample input' /></td>
                             </tr>
                             <tr>
                                 <td><label for='operation'>Operation:</label></td>
-                                <td><input name='operation' type='radio' value='exec'>exec</input></td>
+                                <td>
+                                    <input name='operation' type='radio' value='exec' checked='yes'>exec</input>
+                                    <input name='operation' type='radio' value='test'>test</input>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td colspan='2' id='run-button'>
+                                    <input type='submit' value='Run' onclick='runRegExp()'></input>
+                                </td>
                             </tr>
                         </table>
                     </form>
@@ -204,10 +230,10 @@
             </div>
             <div id='button-container'>
                 <div id='regression-button'>
-                    <input type='submit' value='RegExp regression' onclick='runRegression(); return false' />
+                    <input type='submit' value='RegExp regression' onclick='runRegression(); return false'></input>
                 </div>
                 <div id='engine-button'>
-                    <input type='submit' value='RegExp engine' onclick='showEngine(); return false' />
+                    <input type='submit' value='RegExp engine' onclick='showEngine(); return false'></input>
                 </div>
             </div>
         </div>
