@@ -257,7 +257,6 @@ function testCDLRE(resultCallback) {
         pfmt = cdlre.pfmt,
         checkFlags = cdlre.checkFlags,
         TestSuite = cdlre.test.TestSuite;
-    var failCount = 0;
 
     var disabledTests = [
         // TODO: use digits in quantifier range that overflow the 32/64b space.
@@ -348,6 +347,8 @@ function testCDLRE(resultCallback) {
         [/(a(.|[^d])c)*/, "adcaxc"],
         [/(())?/, ''],
         [/\b/, 'abc'],
+        [/\t\n\v\f\r/, '\t\n\v\f\r'],
+        [/\0/, "abc"],
 
         // Logged.
         [/.+/, "abcdefghijklmnopqrstuvwxyz"],
@@ -445,6 +446,8 @@ function testCDLRE(resultCallback) {
 
         [/(?:first (\d) |second (\d) |third (\d) ){3}/, "first 1 second 2 third 3 "], /* Mozilla bug 692441 */
 
+        [/\w+\s+\w+/, "a_asdf  \tasdkflj"],
+
         /* FIXME: also permit an object literal that has an expected value. */
     ];
 
@@ -459,8 +462,13 @@ function testCDLRE(resultCallback) {
 }
 
 function cliTestCDLRE() {
+    print("Beginning CDLRE tests.");
     var madeDot = false;
+    var passCount = 0;
+    var failCount = 0;
     function onResult(data) {
+        data.reason === 'success' ? passCount++ : failCount++;
+
         if (data.reason === 'success') {
             putstr('.');
             madeDot = true;
@@ -470,9 +478,10 @@ function cliTestCDLRE() {
             print();
             madeDot = false;
         }
-        print((uneval(data)));
+        print('FAILED: ' + uneval(data));
     }
     testCDLRE(onResult);
     if (madeDot)
         print();
+    print(passCount + " tests passed, " + failCount + " tests failed.");
 }
