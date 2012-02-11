@@ -446,6 +446,8 @@ function testCDLRE(resultCallback) {
 
         [/(?:first (\d) |second (\d) |third (\d) ){3}/, "first 1 second 2 third 3 "], /* Mozilla bug 692441 */
 
+        [/\w+\s+\w+/, "a_asdf  \tasdkflj"],
+
         /* FIXME: also permit an object literal that has an expected value. */
     ];
 
