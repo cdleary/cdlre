@@ -348,6 +348,7 @@ function testCDLRE(resultCallback) {
         [/(())?/, ''],
         [/\b/, 'abc'],
         [/\t\n\v\f\r/, '\t\n\v\f\r'],
+        [/\0/, "abc"],
 
         // Logged.
         [/.+/, "abcdefghijklmnopqrstuvwxyz"],
