@@ -99,7 +99,7 @@ function testParser() {
     print('START MAKING TEST CASES...');
     var cases = makeTestCases();
     print('DONE MAKING TEST CASES.');
-    print('Beginning tests...');
+    print('Beginning parser tests...');
 
     function testSuccess(pattern, expected) {
         var actual;
@@ -144,5 +144,5 @@ function testParser() {
             testSuccess(pattern, expected);
         }
     }
-    print('Finished tests.');
+    print('Finished parser tests.\n');
 }
