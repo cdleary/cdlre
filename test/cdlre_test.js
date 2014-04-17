@@ -1,12 +1,10 @@
-/**
- * The testing space is as follows:
- *
- * - Guest: The CDLRE regexp engine.
- * - Host: The hosting VM regexp engine.
- * - Spec: The definitively correct results, as given by the specification.
- *
- * Ideally, all of these categories should produce the same results.
- */
+// The testing space is as follows:
+//
+// - Guest: The CDLRE regexp engine.
+// - Host: The hosting VM regexp engine.
+// - Spec: The definitively correct results, as given by the specification.
+//
+// Ideally, all of these categories should produce the same results.
 
 var cdlre = (function(cdlre) {
     var extend = cdlre.extend,
@@ -15,49 +13,70 @@ var cdlre = (function(cdlre) {
         assert = cdlre.assert,
         pfmt = cdlre.pfmt;
 
-    /**
-     * Compare two regexp match results.
-     */
+    // Compares two regexp match results.
+    // @param diffCallback: Takes a match comparison result object. This object
+    //   must possess a "reason" attribute, which may be "success" to indicate
+    //   equivalence.
     function compareMatchResults(a, b, diffCallback) {
+        // Calls diffCallback with the provided data, extended with the values
+        // of a and b.
+        //
+        // @param data: must have attribute "reason".
         function cbk(data) {
-            if (diffCallback === undefined)
+            if (diffCallback === undefined) {
                 return;
-            if (!data.hasOwnProperty('reason'))
+            }
+
+            if (!data.hasOwnProperty('reason')) {
                 throw new Error('must have a reason');
+            }
+
             diffCallback(extend(data, {a: a, b: b}));
         }
 
+        // If a is null xor b is null, we have a mismatch in the expectation
+        // due to nullness.
         if ((a === null) !== (b === null)) {
             cbk({reason: 'nullness'});
             return false;
         }
 
-        if ((a === null) && (b === null))
+        // If both are null, we have equivalent match results.
+        if ((a === null) && (b === null)) {
             return true;
+        }
 
+        // Checks that an attribute is equivalent on the a and b side.
         function chk(attr) {
             var aval = a[attr];
             var bval = b[attr];
-            if (aval === bval)
+            if (aval === bval) {
                 return true;
+            }
             
             cbk({reason: 'attr', attr: attr, aval: aval, bval: bval});
             return false;
         }
 
+        // Check that each of the metadata attributes on the match object are
+        // in sync.
         var attrs = ['length', 'index', 'input'];
         for (var i = 0; i < attrs.length; ++i) {
             var attr = attrs[i];
-            if (!chk(attr))
+            if (!chk(attr)) {
                 return false;
+            }
         }
 
-        /* Lengths known to be same at this point. */
+        // Check each of the submatches.
+        // Lengths known to be same at this point.
         for (var i = 0; i < b.length; ++i) {
-            if (!chk(i))
+            if (!chk(i)) {
                 return false;
+            }
         }
 
+        // If we've gotten here, they match objects are effectively equivalent.
         cbk({reason: 'success'});
         return true;
     }
@@ -145,6 +164,7 @@ var cdlre = (function(cdlre) {
         return hostResult;
     };
 
+    // @param resultCallback: Optional
     TestCase.prototype.run = function(resultCallback) {
         var self = this;
         var guestResult = this.runGuest();
@@ -464,25 +484,55 @@ function testCDLRE(resultCallback) {
 
 function cliTestCDLRE() {
     print("Beginning CDLRE tests.");
+
+    // Whether we spat out a dot as an indicator of successful test runs being
+    // performed.
     var madeDot = false;
+
     var passCount = 0;
     var failCount = 0;
+    var failures = []; // Populated with match comparison result objects below.
+
+    var printNoNewline = this.putstr === undefined ? this.write : this.putstr;
+
+    // Handles a test result from the suite.
+    // Spits out dots on successes, and exes on failures.
+    // Builds up a list of failures.
+    //
+    // @param data: A match comparison result object. See
+    //   cdlre.compareMatchResults for details.
     function onResult(data) {
         data.reason === 'success' ? passCount++ : failCount++;
 
         if (data.reason === 'success') {
-            putstr('.');
-            madeDot = true;
-            return;
+            printNoNewline('.');
+        } else {
+            printNoNewline('x');
+            failures.push(data);
         }
-        if (madeDot) {
-            print();
-            madeDot = false;
-        }
-        print('FAILED: ' + uneval(data));
+        madeDot = true;
     }
+
     testCDLRE(onResult);
-    if (madeDot)
+
+    if (madeDot) {
         print();
+    }
+
+    for (var i = 0; i < failures.length; ++i) {
+      var failure = failures[i];
+      print("Failure:");
+      print("  Pattern:  ", failure.pattern);
+      print("  Input:    ", failure.input);
+      print("  Op:       ", failure.op);
+      print("  Reason:   ", failure.reason, "mismatch");
+      print("  AttrName: ", failure.attr);
+      print("  GuestAttr:", uneval(failure.guest[failure.attr]));
+      print("  HostAttr: ", uneval(failure.host[failure.attr]));
+      print("  Guest:    ", uneval(failure.guest));
+      print("  Host:     ", uneval(failure.host));
+      //print("  Dump:     ", uneval(failure));
+    }
+
     print(passCount + " tests passed, " + failCount + " tests failed.");
 }

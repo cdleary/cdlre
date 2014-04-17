@@ -1,4 +1,4 @@
-JS_SHELL := jsv -m -n
+JS_SHELL ?= js
 CDLRE_UNICODE := generated/unicode.js
 CDLRE_UNICODE_LZW := generated/unicode_lzw.js
 CDLRE_LIB := \

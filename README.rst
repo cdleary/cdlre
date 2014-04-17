@@ -31,10 +31,14 @@ Goals
   practical.
 
 
-Requirements
+Usage
 ------------
 
-A JavaScript shell with the command-line-invocable name ``jsv``.
+Simple usage is as follows:
+
+.. code-block::
+
+    $ JS_SHELL=d8 make
 
 
 Make targets
